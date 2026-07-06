@@ -7,31 +7,71 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <main>
-      <h1>Gerador de Propostas</h1>
-      <p class="sub">Envie um Termo de Referência (PDF, DOCX ou TXT) e receba a Proposta e o Resumo em Word.</p>
+    <!-- TELA DE LOGIN -->
+    <div id="tela-login">
+      <div class="card-login">
+        <img src="/logo.svg" alt="Logo" class="logo" />
+        <h1>Gerador de Propostas</h1>
+        <p class="sub">Acesse com sua senha</p>
+        <form id="form-login">
+          <input type="password" id="senha-login" placeholder="Senha" autocomplete="current-password" required />
+          <button type="submit">Entrar</button>
+          <p id="erro-login" class="erro-texto" hidden></p>
+        </form>
+      </div>
+    </div>
 
-      <form id="form">
-        <label id="dropzone" for="arquivo">
-          <span id="dz-texto">Arraste o TR aqui ou clique para selecionar</span>
-          <input type="file" id="arquivo" accept=".pdf,.docx,.txt,.md" hidden />
-        </label>
-        <input type="password" id="senha" placeholder="Senha de acesso" autocomplete="current-password" />
-        <button type="submit" id="btn" disabled>Gerar Proposta</button>
-      </form>
+    <!-- APP -->
+    <div id="app" hidden>
+      <header>
+        <img src="/logo.svg" alt="Logo" class="logo logo-mini" />
+        <nav>
+          <button class="aba ativa" data-aba="gerador">Gerador de Proposta</button>
+          <button class="aba" data-aba="enviados">Arquivos Enviados</button>
+          <button class="aba" data-aba="gerados">Arquivos Gerados</button>
+        </nav>
+        <button id="sair">Sair</button>
+      </header>
 
-      <div id="status" hidden></div>
+      <main>
+        <!-- ABA GERADOR -->
+        <section id="aba-gerador">
+          <h2>Nova Proposta</h2>
+          <p class="sub">Envie um Termo de Referência (PDF, DOCX ou TXT).</p>
+          <form id="form">
+            <label id="dropzone" for="arquivo">
+              <span id="dz-texto">Arraste o TR aqui ou clique para selecionar</span>
+              <input type="file" id="arquivo" accept=".pdf,.docx,.txt,.md" hidden />
+            </label>
+            <button type="submit" id="btn" disabled>Gerar Proposta</button>
+          </form>
+          <div id="status" hidden></div>
+          <div id="resultado" hidden>
+            <h3 id="titulo-proposta"></h3>
+            <div class="downloads">
+              <a id="dl-proposta" class="btn-dl">⬇ Baixar Proposta.docx</a>
+              <a id="dl-resumo" class="btn-dl">⬇ Baixar Resumo.docx</a>
+            </div>
+            <dl id="resumo-info"></dl>
+          </div>
+        </section>
 
-      <section id="resultado" hidden>
-        <h2 id="titulo-proposta"></h2>
-        <div class="downloads">
-          <a id="dl-proposta" class="btn-dl">⬇ Baixar Proposta.docx</a>
-          <a id="dl-resumo" class="btn-dl">⬇ Baixar Resumo.docx</a>
-        </div>
-        <h3>Resumo</h3>
-        <dl id="resumo-info"></dl>
-      </section>
-    </main>
+        <!-- ABA ENVIADOS -->
+        <section id="aba-enviados" hidden>
+          <h2>Arquivos Enviados</h2>
+          <p class="sub">Termos de Referência já processados.</p>
+          <div id="lista-enviados" class="lista"></div>
+        </section>
+
+        <!-- ABA GERADOS -->
+        <section id="aba-gerados" hidden>
+          <h2>Arquivos Gerados</h2>
+          <p class="sub">Cada proposta gera dois documentos: a Proposta completa e o Resumo.</p>
+          <div id="lista-gerados" class="lista"></div>
+        </section>
+      </main>
+    </div>
+
     <script type="module" src="/main.js"></script>
   </body>
 </html>
