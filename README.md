@@ -58,6 +58,15 @@ Acesse http://localhost:5173, envie o TR (PDF, DOCX ou TXT) e baixe a proposta e
 - Uma única chamada à API por TR, retornando JSON compacto.
 - Formatação/layout ficam nos templates DOCX, fora da IA.
 
+## Deploy (Render — gratuito)
+
+1. Faça push do repo para o GitHub.
+2. Em https://render.com → New → Web Service → conecte o repositório (runtime Docker é detectado pelo `Dockerfile`).
+3. Em Environment, defina `ANTHROPIC_API_KEY` e `APP_SENHA` (senha que o usuário digita na tela).
+4. Pronto: a URL gerada serve o frontend e a API juntos. Cada `git push` na branch main redeploya automaticamente.
+
+Obs.: no plano gratuito o serviço hiberna após inatividade — o primeiro acesso do dia pode levar ~30 s.
+
 ## Versionamento (GitHub)
 
 ```bash

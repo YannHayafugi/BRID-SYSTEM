@@ -25,6 +25,15 @@ h1 { margin: 0 0 4px; }
 }
 #dropzone.ativo, #dropzone:hover { border-color: #2563eb; background: #eef4ff; }
 
+#senha {
+  margin-top: 16px;
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  border: 1px solid #b3c2d1;
+  border-radius: 10px;
+}
+
 #btn {
   margin-top: 16px;
   width: 100%;

@@ -36,6 +36,7 @@ form.addEventListener("submit", async (e) => {
 
   const fd = new FormData();
   fd.append("arquivo", arquivo);
+  fd.append("senha", document.getElementById("senha").value);
 
   try {
     const resp = await fetch("/api/gerar", { method: "POST", body: fd });

@@ -6,9 +6,10 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import extractor, generator, renderer
 
@@ -31,7 +32,11 @@ def health():
 
 
 @app.post("/api/gerar")
-async def gerar(arquivo: UploadFile):
+async def gerar(arquivo: UploadFile, senha: str = Form("")):
+    senha_esperada = os.getenv("APP_SENHA", "")
+    if senha_esperada and senha != senha_esperada:
+        raise HTTPException(401, "Senha de acesso incorreta.")
+
     ext = Path(arquivo.filename or "tr.pdf").suffix.lower()
     if ext not in (".pdf", ".docx", ".txt", ".md"):
         raise HTTPException(400, "Envie um TR em PDF, DOCX ou TXT.")
@@ -82,3 +87,9 @@ def download(job_id: str, doc: str):
         filename=nomes[doc],
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+# Em produção, o FastAPI serve o frontend buildado (mesma origem, sem CORS).
+_front_dist = Path(os.getenv("FRONT_DIST", Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"))
+if _front_dist.exists():
+    app.mount("/", StaticFiles(directory=str(_front_dist), html=True), name="site")
