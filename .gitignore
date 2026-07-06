@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+
+# Segredos
+.env
+
+# Saídas geradas
+backend/output/
+uploads/
+
+# SO / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

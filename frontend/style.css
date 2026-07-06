@@ -1,0 +1,58 @@
+* { box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #f4f6f8;
+  color: #1c2733;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+}
+main { width: 100%; max-width: 640px; padding: 48px 24px; }
+h1 { margin: 0 0 4px; }
+.sub { color: #5a6b7b; margin-top: 0; }
+
+#dropzone {
+  display: block;
+  border: 2px dashed #b3c2d1;
+  border-radius: 12px;
+  background: #fff;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  color: #5a6b7b;
+  transition: border-color 0.2s, background 0.2s;
+}
+#dropzone.ativo, #dropzone:hover { border-color: #2563eb; background: #eef4ff; }
+
+#btn {
+  margin-top: 16px;
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  background: #2563eb;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+#btn:disabled { background: #b3c2d1; cursor: not-allowed; }
+
+#status { margin-top: 20px; padding: 14px; border-radius: 10px; }
+#status.info { background: #eef4ff; color: #1e40af; }
+#status.erro { background: #fee2e2; color: #991b1b; }
+
+#resultado { margin-top: 28px; background: #fff; border-radius: 12px; padding: 24px; }
+.downloads { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 20px; }
+.btn-dl {
+  padding: 10px 18px;
+  background: #16a34a;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+}
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+dt { font-weight: 600; color: #5a6b7b; }
+dd { margin: 0; }
