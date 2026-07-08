@@ -1,41 +1,42 @@
-"""Geração híbrida: 1 chamada à API do Claude retornando JSON estruturado."""
+"""Geração híbrida: 1 chamada à API do Gemini retornando JSON estruturado."""
 import json
 import os
 
-from anthropic import Anthropic
+from google import genai
+from google.genai import types
 
 from . import prompts
 
-_client: Anthropic | None = None
+_client: genai.Client | None = None
 
 
-def _get_client() -> Anthropic:
+def _get_client() -> genai.Client:
     global _client
     if _client is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise RuntimeError("Defina ANTHROPIC_API_KEY no arquivo backend/.env")
-        _client = Anthropic(api_key=api_key)
+            raise RuntimeError("Defina GEMINI_API_KEY no arquivo backend/.env")
+        _client = genai.Client(api_key=api_key)
     return _client
 
 
 def gerar_conteudo(tr_texto: str) -> dict:
     """Envia o texto do TR e retorna o dict com o conteúdo da proposta e do resumo."""
-    modelo = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
-    resposta = _get_client().messages.create(
+    modelo = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    resposta = _get_client().models.generate_content(
         model=modelo,
-        max_tokens=8000,
-        system=prompts.SYSTEM,
-        messages=[{"role": "user", "content": prompts.USER_TEMPLATE.format(tr_texto=tr_texto)}],
+        contents=prompts.USER_TEMPLATE.format(tr_texto=tr_texto),
+        config=types.GenerateContentConfig(
+            system_instruction=prompts.SYSTEM,
+            max_output_tokens=8000,
+            response_mime_type="application/json",
+        ),
     )
-    texto = resposta.content[0].text.strip()
+    texto = (resposta.text or "").strip()
     # tolera cercas de código caso o modelo as inclua
     if texto.startswith("```"):
         texto = texto.strip("`")
         texto = texto[texto.index("{"):texto.rindex("}") + 1]
     dados = json.loads(texto)
-    dados["_uso_tokens"] = {
-        "entrada": resposta.usage.input_tokens,
-        "saida": resposta.usage.output_tokens,
-    }
-    return dados
+    uso = resposta.usage_metadata
+    dados["_uso_tokens"]
