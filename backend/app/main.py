@@ -84,7 +84,7 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
         shutil.copyfileobj(arquivo.file, destino)
 
     # Decide automaticamente: texto extraível → extração local (0 tokens extras);
-    # PDF digitalizado → envia o PDF ao Gemini, que faz OCR (~258 tokens/página).
+    # PDF digitalizado → envia o PDF à IA, que lê as páginas nativamente (OCR).
     usar_pdf_nativo = False
     if ext == ".pdf":
         try:
