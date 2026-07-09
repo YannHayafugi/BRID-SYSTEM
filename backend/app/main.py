@@ -68,17 +68,34 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
     with tr_path.open("wb") as destino:
         shutil.copyfileobj(arquivo.file, destino)
 
-    texto = extractor.extrair_texto(tr_path)
-    if len(texto.strip()) < 100:
-        shutil.rmtree(pasta, ignore_errors=True)
-        raise HTTPException(422, "Não foi possível extrair texto suficiente do arquivo "
-                                 "(PDF escaneado? Considere aplicar OCR antes).")
+    # Decide automaticamente: texto extraível → extração local (0 tokens extras);
+    # PDF digitalizado → envia o PDF ao Gemini, que faz OCR (~258 tokens/página).
+    usar_pdf_nativo = False
+    if ext == ".pdf":
+        info = extractor.analisar_pdf(tr_path)
+        texto = info["texto"]
+        if extractor.precisa_ocr(info):
+            max_paginas = int(os.getenv("MAX_PDF_PAGINAS", "100"))
+            if info["total_paginas"] > max_paginas:
+                shutil.rmtree(pasta, ignore_errors=True)
+                raise HTTPException(422, f"PDF digitalizado com {info['total_paginas']} páginas "
+                                         f"excede o limite de {max_paginas}. Divida o arquivo.")
+            usar_pdf_nativo = True
+    else:
+        texto = extractor.extrair_texto(tr_path)
 
-    max_chars = int(os.getenv("MAX_TR_CHARS", "60000"))
-    texto = extractor.limpar_texto(texto, max_chars)
+    if not usar_pdf_nativo:
+        if len(texto.strip()) < 100:
+            shutil.rmtree(pasta, ignore_errors=True)
+            raise HTTPException(422, "Não foi possível extrair texto suficiente do arquivo.")
+        max_chars = int(os.getenv("MAX_TR_CHARS", "60000"))
+        texto = extractor.limpar_texto(texto, max_chars)
 
     try:
-        dados = generator.gerar_conteudo(texto)
+        if usar_pdf_nativo:
+            dados = generator.gerar_conteudo_pdf(tr_path)
+        else:
+            dados = generator.gerar_conteudo(texto)
     except Exception as e:  # noqa: BLE001
         shutil.rmtree(pasta, ignore_errors=True)
         raise HTTPException(502, f"Falha na geração via IA: {e}") from e
