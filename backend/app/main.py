@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import extractor, generator, renderer
@@ -47,6 +47,12 @@ def _exigir_senha(x_senha: str | None):
         raise HTTPException(401, "Não autorizado. Faça login novamente.")
 
 
+@app.exception_handler(Exception)
+async def _erro_nao_tratado(request, exc):
+    """Garante resposta JSON mesmo em erros inesperados (o frontend espera JSON)."""
+    return JSONResponse(status_code=500, content={"detail": f"Erro interno: {exc}"})
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -81,7 +87,11 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
     # PDF digitalizado → envia o PDF ao Gemini, que faz OCR (~258 tokens/página).
     usar_pdf_nativo = False
     if ext == ".pdf":
-        info = extractor.analisar_pdf(tr_path)
+        try:
+            info = extractor.analisar_pdf(tr_path)
+        except Exception as e:  # noqa: BLE001
+            shutil.rmtree(pasta, ignore_errors=True)
+            raise HTTPException(422, f"Não foi possível ler o PDF: {e}") from e
         texto = info["texto"]
         if extractor.precisa_ocr(info):
             max_paginas = int(os.getenv("MAX_PDF_PAGINAS", "100"))
@@ -109,7 +119,11 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
         shutil.rmtree(pasta, ignore_errors=True)
         raise HTTPException(502, f"Falha na geração via IA: {e}") from e
 
-    renderer.gerar_documentos(dados, pasta)
+    try:
+        renderer.gerar_documentos(dados, pasta)
+    except Exception as e:  # noqa: BLE001
+        shutil.rmtree(pasta, ignore_errors=True)
+        raise HTTPException(500, f"Falha ao montar os documentos DOCX: {e}") from e
 
     meta = {
         "job_id": job_id,
