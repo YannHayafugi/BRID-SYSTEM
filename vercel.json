@@ -1,4 +1,5 @@
 {
+  "fluid": true,
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "rewrites": [
@@ -6,8 +7,5 @@
   ],
   "functions": {
     "api/index.py": {
-      "maxDuration": 60,
-      "includeFiles": "backend/**"
-    }
-  }
-}
+      "maxDuration": 300,
+      "includeFiles": "backen

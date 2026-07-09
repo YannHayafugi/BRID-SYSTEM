@@ -88,8 +88,15 @@ $("form").addEventListener("submit", async (e) => {
 
   try {
     const resp = await fetch("/api/gerar", { method: "POST", body: fd });
-    const dados = await resp.json();
     if (resp.status === 401) return mostrarLogin();
+    if (resp.status === 504) throw new Error("O servidor demorou demais para responder (timeout). Tente novamente ou use um TR menor.");
+    const texto = await resp.text();
+    let dados;
+    try {
+      dados = JSON.parse(texto);
+    } catch {
+      throw new Error(`Erro no servidor (${resp.status}): ${texto.slice(0, 200)}`);
+    }
     if (!resp.ok) throw new Error(dados.detail || "Erro desconhecido");
 
     status.hidden = true;
@@ -345,14 +352,4 @@ $("form-oficio").addEventListener("submit", async (e) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Oficio - Contrato ${payload.numero_contrato.replace(/\//g, "-")}.docx`;
-    a.click();
-    URL.revokeObjectURL(url);
-    st.textContent = "✅ Ofício gerado — download iniciado.";
-  } catch (err) {
-    st.className = "erro-texto";
-    st.textContent = `❌ ${err.message}`;
-  } finally {
-    $("btn-oficio").disabled = false;
-  }
-});
+    a.download = `Oficio - Contrato ${payload.numero_con
