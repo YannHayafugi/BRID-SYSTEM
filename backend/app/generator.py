@@ -38,9 +38,8 @@ def gerar_conteudo_pdf(caminho_pdf) -> dict:
     return _gerar([parte_pdf, prompts.USER_TEMPLATE_PDF])
 
 
-def _gerar(contents) -> dict:
-    modelo = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    resposta = _get_client().models.generate_content(
+def _chamar(contents, modelo: str):
+    return _get_client().models.generate_content(
         model=modelo,
         contents=contents,
         config=types.GenerateContentConfig(
@@ -50,6 +49,33 @@ def _gerar(contents) -> dict:
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
+
+
+def _gerar(contents) -> dict:
+    import time
+
+    modelo = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    fallback = os.getenv("GEMINI_MODEL_FALLBACK", "gemini-2.0-flash")
+    resposta = None
+    ultimo_erro = None
+    # 3 tentativas com espera progressiva; erros 503/429 são temporários
+    for tentativa, espera in enumerate((0, 5, 15)):
+        if espera:
+            time.sleep(espera)
+        try:
+            resposta = _chamar(contents, modelo)
+            break
+        except Exception as e:  # noqa: BLE001
+            ultimo_erro = e
+            if not any(cod in str(e) for cod in ("503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED")):
+                raise
+    if resposta is None and fallback and fallback != modelo:
+        try:
+            resposta = _chamar(contents, fallback)
+        except Exception:  # noqa: BLE001
+            raise ultimo_erro
+    if resposta is None:
+        raise ultimo_erro
     texto = (resposta.text or "").strip()
     # tolera cercas de código caso o modelo as inclua
     if texto.startswith("```"):

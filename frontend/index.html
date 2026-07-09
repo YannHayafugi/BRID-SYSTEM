@@ -27,6 +27,7 @@
         <img src="/logo.svg" alt="Logo" class="logo logo-mini" />
         <nav>
           <button class="aba ativa" data-aba="gerador">Gerador de Proposta</button>
+          <button class="aba" data-aba="oficios">Ofícios</button>
           <button class="aba" data-aba="enviados">Arquivos Enviados</button>
           <button class="aba" data-aba="gerados">Arquivos Gerados</button>
         </nav>
@@ -54,6 +55,59 @@
             </div>
             <dl id="resumo-info"></dl>
           </div>
+        </section>
+
+        <!-- ABA OFÍCIOS -->
+        <section id="aba-oficios" hidden>
+          <h2>Gerador de Ofícios</h2>
+          <p class="sub">Ofício de formalização de projetos (layout FIA). Os campos já vêm preenchidos com o texto padrão — ajuste o necessário e gere o .docx.</p>
+          <form id="form-oficio" class="form-oficio">
+            <details open>
+              <summary>Destinatário e referência</summary>
+              <label>Destinatário <input id="of-destinatario" required /></label>
+              <label>Endereço (uma linha do ofício por linha) <textarea id="of-endereco" rows="3"></textarea></label>
+              <div class="grid2">
+                <label>Nº do contrato <input id="of-contrato" required /></label>
+                <label>Tratamento <select id="of-tratamento"><option>Senhor</option><option>Senhora</option></select></label>
+              </div>
+              <label>Assunto <input id="of-assunto" required /></label>
+              <div class="grid2">
+                <label>A/C — Nome <input id="of-ac-nome" /></label>
+                <label>A/C — Cargo <input id="of-ac-cargo" /></label>
+              </div>
+            </details>
+            <details>
+              <summary>Corpo do ofício (textos padrão editáveis)</summary>
+              <label>Abertura <textarea id="of-abertura" rows="4"></textarea></label>
+              <label>Etapas (ex.: 01 a 03) <input id="of-etapas" /></label>
+              <label>Parágrafo das etapas — use o marcador {ETAPAS} <textarea id="of-par-etapas" rows="4"></textarea></label>
+              <label>Introdução da lista de dados <textarea id="of-intro-dados" rows="3"></textarea></label>
+              <label>Itens de dados (um por linha) <textarea id="of-itens-dados" rows="7"></textarea></label>
+              <label>Transição sobre normas <textarea id="of-transicao-normas" rows="4"></textarea></label>
+              <label>Introdução da lista de normas <textarea id="of-intro-normas" rows="3"></textarea></label>
+              <label>Itens de normas (um por linha; comece com "-" para subitem a, b, c) <textarea id="of-itens-normas" rows="12"></textarea></label>
+              <label>Pós-lista <textarea id="of-pos-lista" rows="3"></textarea></label>
+              <label>Reforçamos <textarea id="of-reforcamos" rows="3"></textarea></label>
+              <label>Tempestividade <textarea id="of-tempestividade" rows="3"></textarea></label>
+              <label>Ambiente colaborativo — Teams <textarea id="of-teams" rows="4"></textarea></label>
+              <label>Ambiente colaborativo — SharePoint <textarea id="of-sharepoint-prazo" rows="4"></textarea></label>
+              <label>Exclusividade SharePoint — parágrafo 1 <textarea id="of-sp1" rows="3"></textarea></label>
+              <label>Exclusividade SharePoint — parágrafo 2 <textarea id="of-sp2" rows="3"></textarea></label>
+              <label>Exclusividade SharePoint — parágrafo 3 <textarea id="of-sp3" rows="3"></textarea></label>
+              <label>Reunião inaugural <textarea id="of-reuniao" rows="3"></textarea></label>
+              <label>Encerramento <textarea id="of-encerramento" rows="3"></textarea></label>
+            </details>
+            <details open>
+              <summary>Fecho</summary>
+              <div class="grid2">
+                <label>Cidade de emissão <input id="of-cidade" /></label>
+                <label>Data por extenso <input id="of-data" /></label>
+              </div>
+              <label>Assinatura <input id="of-assinatura" /></label>
+            </details>
+            <button type="submit" id="btn-oficio">Gerar Ofício (.docx)</button>
+          </form>
+          <div id="status-oficio" hidden></div>
         </section>
 
         <!-- ABA ENVIADOS -->
