@@ -54,4 +54,23 @@ def _extrair_docx(caminho: Path) -> str:
     partes = [p.text for p in doc.paragraphs if p.text.strip()]
     for tabela in doc.tables:
         for linha in tabela.rows:
-            celul
+            celulas = [c.text.strip() for c in linha.cells if c.text.strip()]
+            if celulas:
+                partes.append(" | ".join(celulas))
+    return "\n".join(partes)
+
+
+def limpar_texto(texto: str, max_chars: int = 60000) -> str:
+    """Remove linhas repetidas/vazias e trunca para economizar tokens."""
+    linhas, anteriores = [], set()
+    for linha in texto.splitlines():
+        linha = linha.strip()
+        if not linha:
+            continue
+        # remove cabeçalhos/rodapés repetidos (aparecem em toda página)
+        if linha in anteriores and len(linha) < 80:
+            continue
+        anteriores.add(linha)
+        linhas.append(linha)
+    resultado = "\n".join(linhas)
+    return resultado[:max_chars]

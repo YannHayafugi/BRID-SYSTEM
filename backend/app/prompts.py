@@ -44,3 +44,11 @@ TERMO DE REFERÊNCIA:
 ---
 {tr_texto}
 ---"""
+
+# Usado quando o PDF é digitalizado (sem texto extraível): o arquivo vai anexado
+# e o próprio Gemini faz a leitura (OCR) das páginas.
+USER_TEMPLATE_PDF = USER_TEMPLATE.replace(
+    "TERMO DE REFERÊNCIA:\n---\n{tr_texto}\n---",
+    "O TERMO DE REFERÊNCIA é o documento PDF digitalizado anexado a esta mensagem. "
+    "Leia todo o conteúdo das páginas (incluindo tabelas) antes de gerar o JSON.",
+)
