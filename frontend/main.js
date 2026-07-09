@@ -352,4 +352,14 @@ $("form-oficio").addEventListener("submit", async (e) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Oficio - Contrato ${payload.numero_con
+    a.download = `Oficio - Contrato ${payload.numero_contrato.replace(/\//g, "-")}.docx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    st.textContent = "✅ Ofício gerado — download iniciado.";
+  } catch (err) {
+    st.className = "erro-texto";
+    st.textContent = `❌ ${err.message}`;
+  } finally {
+    $("btn-oficio").disabled = false;
+  }
+});
