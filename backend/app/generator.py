@@ -22,10 +22,27 @@ def _get_client() -> genai.Client:
 
 def gerar_conteudo(tr_texto: str) -> dict:
     """Envia o texto do TR e retorna o dict com o conteúdo da proposta e do resumo."""
+    return _gerar(prompts.USER_TEMPLATE.format(tr_texto=tr_texto))
+
+
+def gerar_conteudo_pdf(caminho_pdf) -> dict:
+    """PDF digitalizado: envia o arquivo direto ao Gemini, que faz o OCR nativamente.
+
+    Custa ~258 tokens/página — usado somente quando não há texto extraível.
+    """
+    from pathlib import Path
+
+    parte_pdf = types.Part.from_bytes(
+        data=Path(caminho_pdf).read_bytes(), mime_type="application/pdf"
+    )
+    return _gerar([parte_pdf, prompts.USER_TEMPLATE_PDF])
+
+
+def _gerar(contents) -> dict:
     modelo = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     resposta = _get_client().models.generate_content(
         model=modelo,
-        contents=prompts.USER_TEMPLATE.format(tr_texto=tr_texto),
+        contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=prompts.SYSTEM,
             max_output_tokens=16384,
