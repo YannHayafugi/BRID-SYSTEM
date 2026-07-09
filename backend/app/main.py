@@ -31,7 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
+# No Vercel (serverless) o único diretório gravável é /tmp
+_output_padrao = "/tmp/output" if os.getenv("VERCEL") else str(Path(__file__).resolve().parent.parent / "output")
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", _output_padrao))
 DOCS = {"proposta": "Proposta.docx", "resumo": "Resumo.docx"}
 
 
