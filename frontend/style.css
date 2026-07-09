@@ -134,3 +134,12 @@ dd { margin: 0; }
 #btn-oficio:disabled { opacity: 0.6; cursor: default; }
 #status-oficio { margin-top: 12px; }
 .erro-texto { color: #c0392b; }
+
+/* endereço estruturado (aba ofícios) */
+.fs-endereco { border: 1px solid #dde5ec; border-radius: 10px; margin-top: 12px; padding: 4px 12px 12px; }
+.fs-endereco legend { font-size: 13px; font-weight: 600; color: #3a4a5a; padding: 0 6px; }
+.grid-endereco { display: grid; grid-template-columns: 160px 1fr 90px; gap: 0 12px; }
+.grid-endereco label:nth-child(4) { grid-column: 1; }
+.grid-endereco label:nth-child(5) { grid-column: 2; }
+.grid-endereco label:nth-child(6) { grid-column: 1 / 3; }
+.grid-endereco label:nth-child(7) { grid-column: 3; grid-row: 3; }
