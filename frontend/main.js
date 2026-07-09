@@ -173,7 +173,13 @@ async function carregarListas() {
 // ---------- ofícios ----------
 const OFICIO_PADRAO = {
   destinatario: "A PREFEITURA MUNICIPAL DE PRAIA GRANDE/SP",
-  endereco: "Rua do Limão, 448\nPraia Grande – SP",
+  tipoLogradouro: "Rua",
+  logradouro: "do Limão",
+  numeroEnd: "448",
+  complemento: "",
+  bairro: "",
+  cidadeEnd: "Praia Grande",
+  estado: "SP",
   contrato: "34/2026",
   assunto: "Solicitação de documentação e informações iniciais.",
   acNome: "João Pedro",
@@ -244,7 +250,11 @@ function dataPorExtenso() {
 
 function preencherOficioPadrao() {
   const m = {
-    "of-destinatario": OFICIO_PADRAO.destinatario, "of-endereco": OFICIO_PADRAO.endereco,
+    "of-destinatario": OFICIO_PADRAO.destinatario,
+    "of-tipo-logradouro": OFICIO_PADRAO.tipoLogradouro, "of-logradouro": OFICIO_PADRAO.logradouro,
+    "of-numero": OFICIO_PADRAO.numeroEnd, "of-complemento": OFICIO_PADRAO.complemento,
+    "of-bairro": OFICIO_PADRAO.bairro, "of-cidade-end": OFICIO_PADRAO.cidadeEnd,
+    "of-estado": OFICIO_PADRAO.estado,
     "of-contrato": OFICIO_PADRAO.contrato, "of-assunto": OFICIO_PADRAO.assunto,
     "of-ac-nome": OFICIO_PADRAO.acNome, "of-ac-cargo": OFICIO_PADRAO.acCargo,
     "of-abertura": OFICIO_PADRAO.abertura, "of-etapas": OFICIO_PADRAO.etapas,
@@ -264,6 +274,15 @@ function preencherOficioPadrao() {
 }
 preencherOficioPadrao();
 
+function montarEndereco() {
+  const v = (id) => $(id).value.trim();
+  const linha1 = [`${v("of-tipo-logradouro")} ${v("of-logradouro")}`.trim(), v("of-numero")]
+    .filter(Boolean).join(", ") + (v("of-complemento") ? ` – ${v("of-complemento")}` : "");
+  const linha2 = [v("of-bairro"), [v("of-cidade-end"), $("of-estado").value].filter(Boolean).join(" – ")]
+    .filter(Boolean).join(", ");
+  return [linha1, linha2].filter(Boolean);
+}
+
 function linhas(id) {
   return $(id).value.split("\n").map((l) => l.trim()).filter(Boolean);
 }
@@ -281,7 +300,7 @@ $("form-oficio").addEventListener("submit", async (e) => {
   const artigo = tratamento === "Senhor" ? "Ilustríssimo Senhor" : "Ilustríssima Senhora";
   const payload = {
     destinatario_nome: $("of-destinatario").value,
-    destinatario_endereco: linhas("of-endereco"),
+    destinatario_endereco: montarEndereco(),
     numero_contrato: $("of-contrato").value,
     assunto: $("of-assunto").value,
     ac_nome: acNome,

@@ -65,7 +65,35 @@
             <details open>
               <summary>Destinatário e referência</summary>
               <label>Destinatário <input id="of-destinatario" required /></label>
-              <label>Endereço (uma linha do ofício por linha) <textarea id="of-endereco" rows="3"></textarea></label>
+              <fieldset class="fs-endereco">
+                <legend>Endereço</legend>
+                <div class="grid-endereco">
+                  <label>Tipo de logradouro
+                    <select id="of-tipo-logradouro">
+                      <option>Rua</option><option>Avenida</option><option>Praça</option>
+                      <option>Alameda</option><option>Travessa</option><option>Estrada</option>
+                      <option>Rodovia</option><option>Largo</option><option>Viela</option>
+                      <option>Via</option><option>Quadra</option><option>Setor</option>
+                    </select>
+                  </label>
+                  <label>Logradouro <input id="of-logradouro" /></label>
+                  <label>Número <input id="of-numero" /></label>
+                  <label>Complemento <input id="of-complemento" /></label>
+                  <label>Bairro <input id="of-bairro" /></label>
+                  <label>Cidade <input id="of-cidade-end" /></label>
+                  <label>Estado
+                    <select id="of-estado">
+                      <option>AC</option><option>AL</option><option>AP</option><option>AM</option>
+                      <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
+                      <option>GO</option><option>MA</option><option>MT</option><option>MS</option>
+                      <option>MG</option><option>PA</option><option>PB</option><option>PR</option>
+                      <option>PE</option><option>PI</option><option>RJ</option><option>RN</option>
+                      <option>RS</option><option>RO</option><option>RR</option><option>SC</option>
+                      <option selected>SP</option><option>SE</option><option>TO</option>
+                    </select>
+                  </label>
+                </div>
+              </fieldset>
               <div class="grid2">
                 <label>Nº do contrato <input id="of-contrato" required /></label>
                 <label>Tratamento <select id="of-tratamento"><option>Senhor</option><option>Senhora</option></select></label>
