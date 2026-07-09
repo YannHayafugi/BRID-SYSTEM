@@ -5,11 +5,11 @@ services:
     plan: free
     autoDeploy: true
     envVars:
-      - key: GEMINI_API_KEY
+      - key: ANTHROPIC_API_KEY
         sync: false
       - key: APP_SENHA
         sync: false
-      - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
       - key: MAX_TR_CHARS
         value: "60000"
