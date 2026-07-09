@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(Path(__file__).resolve().parent.parent / "output")))
 DOCS = {"proposta": "Proposta.docx", "resumo": "Resumo.docx"}
 
 
