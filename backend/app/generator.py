@@ -28,8 +28,9 @@ def gerar_conteudo(tr_texto: str) -> dict:
         contents=prompts.USER_TEMPLATE.format(tr_texto=tr_texto),
         config=types.GenerateContentConfig(
             system_instruction=prompts.SYSTEM,
-            max_output_tokens=8000,
+            max_output_tokens=16384,
             response_mime_type="application/json",
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
     texto = (resposta.text or "").strip()
@@ -39,4 +40,8 @@ def gerar_conteudo(tr_texto: str) -> dict:
         texto = texto[texto.index("{"):texto.rindex("}") + 1]
     dados = json.loads(texto)
     uso = resposta.usage_metadata
-    dados["_uso_tokens"]
+    dados["_uso_tokens"] = {
+        "entrada": uso.prompt_token_count if uso else 0,
+        "saida": uso.candidates_token_count if uso else 0,
+    }
+    return dados
