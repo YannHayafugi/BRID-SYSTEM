@@ -112,3 +112,25 @@ dd { margin: 0; }
   text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;
 }
 .btn-sec { background: #5a6b7b; }
+
+/* ---------- ofícios ---------- */
+.form-oficio details {
+  background: #fff; border: 1px solid #dde5ec; border-radius: 12px;
+  padding: 12px 16px; margin-bottom: 12px;
+}
+.form-oficio summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.form-oficio label { display: block; margin: 10px 0 0; font-size: 13px; color: #3a4a5a; }
+.form-oficio input, .form-oficio textarea, .form-oficio select {
+  width: 100%; margin-top: 4px; padding: 8px 10px;
+  font-size: 14px; font-family: inherit;
+  border: 1px solid #b3c2d1; border-radius: 8px;
+}
+.form-oficio .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+#btn-oficio {
+  margin-top: 4px; padding: 12px 24px; font-size: 15px;
+  border: 0; border-radius: 10px; cursor: pointer;
+  background: #1c64d9; color: #fff;
+}
+#btn-oficio:disabled { opacity: 0.6; cursor: default; }
+#status-oficio { margin-top: 12px; }
+.erro-texto { color: #c0392b; }

@@ -17,6 +17,13 @@ from . import extractor, generator, renderer
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 app = FastAPI(title="Gerador de Propostas")
+# Módulo de ofícios (isolado): se falhar ao carregar, o resto do app segue no ar.
+try:
+    from .oficio import router as oficio_router
+    app.include_router(oficio_router)
+except Exception as _e:  # noqa: BLE001
+    print(f"[aviso] módulo de ofícios não carregado: {_e}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
