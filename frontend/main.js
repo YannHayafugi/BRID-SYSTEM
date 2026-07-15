@@ -267,11 +267,15 @@ function renderFollowup(p, etapas) {
     : `<label class="btn-doc pendente" title="Enviar o arquivo do ofício deste processo (PDF, DOCX ou imagem)">＋ Anexar Ofício<input type="file" hidden data-job="${p.job_id}" class="up-oficio" /></label>`;
 
   const docTR = p.tr_url
-    ? `<a class="btn-dl btn-sec" href="${p.tr_url}" title="Baixar o Termo de Referência enviado">📎 Termo de Referência</a>`
-    : `<span class="btn-doc pendente" title="Este processo ainda não tem TR — ele entra quando a proposta for gerada">TR pendente</span>`;
+    ? `<a class="btn-dl btn-sec" href="${p.tr_url}" title="TR enviado — clique para baixar">📎 TR (enviado)</a>
+       <label class="btn-doc" title="Enviar outro arquivo no lugar do TR atual">↻ Substituir TR<input type="file" hidden data-job="${p.job_id}" class="up-tr" accept=".pdf,.docx,.txt,.md" /></label>`
+    : `<label class="btn-doc pendente" title="Enviar o Termo de Referência deste processo (PDF, DOCX ou TXT) — ele será usado para gerar a proposta">＋ Enviar TR<input type="file" hidden data-job="${p.job_id}" class="up-tr" accept=".pdf,.docx,.txt,.md" /></label>`;
   const docProposta = (p.downloads || {}).proposta
-    ? `<a class="btn-dl btn-sec" href="${p.downloads.proposta}" title="Baixar a proposta gerada (.docx)">📎 Proposta</a>`
-    : `<span class="btn-doc pendente" title="A proposta aparece aqui depois de gerada no Gerador de Proposta">Proposta pendente</span>`;
+    ? `<a class="btn-dl btn-sec" href="${p.downloads.proposta}" title="Baixar a proposta gerada (.docx)">📎 Proposta</a>
+       <a class="btn-dl btn-sec" href="${p.downloads.resumo}" title="Baixar o resumo executivo (.docx)">📎 Resumo</a>`
+    : p.tr_url
+      ? `<button type="button" class="btn-doc fu-gerar" data-job="${p.job_id}" title="Analisar o TR com IA e gerar a Proposta e o Resumo deste processo (30–90 s)">⚙ Gerar Proposta</button>`
+      : `<span class="btn-doc pendente" title="Envie o TR primeiro — o botão de gerar a proposta aparece em seguida">Proposta (envie o TR primeiro)</span>`;
 
   $("lista-followup").insertAdjacentHTML(
     "beforeend",
@@ -290,6 +294,25 @@ function renderFollowup(p, etapas) {
     </div>`
   );
 }
+
+// gerar proposta dentro do processo (usa o TR enviado)
+document.addEventListener("click", async (e) => {
+  const g = e.target.closest(".fu-gerar");
+  if (!g) return;
+  g.disabled = true;
+  g.textContent = "⏳ Gerando... (30–90 s)";
+  const fd = new FormData();
+  fd.append("senha", senha);
+  try {
+    const r = await fetch(`/api/followup/${g.dataset.job}/gerar`, { method: "POST", body: fd });
+    if (r.status === 401) return mostrarLogin();
+    const dados = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(dados.detail || `Erro ${r.status}`);
+  } catch (err) {
+    alert(`❌ ${err.message}`);
+  }
+  carregarListas();
+});
 
 // excluir processo (com confirmação)
 document.addEventListener("click", async (e) => {
@@ -310,6 +333,16 @@ document.addEventListener("change", async (e) => {
     fd.append("senha", senha);
     const r = await fetch(`/api/followup/${e.target.dataset.job}/etapa`, { method: "POST", body: fd });
     if (r.status === 401) return mostrarLogin();
+    carregarListas();
+  }
+  // upload de TR no card do processo
+  if (e.target.classList.contains("up-tr") && e.target.files.length) {
+    const fd = new FormData();
+    fd.append("arquivo", e.target.files[0]);
+    fd.append("senha", senha);
+    const r = await fetch(`/api/followup/${e.target.dataset.job}/tr`, { method: "POST", body: fd });
+    if (r.status === 401) return mostrarLogin();
+    if (!r.ok) alert((await r.json().catch(() => ({}))).detail || "Erro ao enviar o TR.");
     carregarListas();
   }
   // upload de ofício

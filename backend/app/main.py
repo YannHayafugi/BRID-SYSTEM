@@ -6,6 +6,7 @@ sobrevive a deploys e funciona em serverless (Vercel) e em servidor (Render).
 import os
 import shutil
 import tempfile
+import unicodedata
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +67,12 @@ def _exigir_senha(x_senha: str | None):
         raise HTTPException(401, "Não autorizado. Faça login novamente.")
 
 
+def _nome_download(nome: str) -> str:
+    """Remove acentos/caracteres inválidos para o cabeçalho Content-Disposition."""
+    ascii_ = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode()
+    return ascii_.replace('"', "").strip() or "documento"
+
+
 def _obter_ou_404(job_id: str) -> dict:
     if not job_id.isalnum():
         raise HTTPException(404, "Proposta não encontrada.")
@@ -93,6 +100,43 @@ def login(senha: str = Form("")):
     return {"ok": True}
 
 
+def _analisar_tr(tr_path: Path, ext: str) -> dict:
+    """Motor de geração: extrai o texto do TR (ou usa OCR nativo) e chama a IA.
+
+    Reutilizado pelo Gerador de Proposta e pelo botão 'Gerar Proposta' do Follow-up.
+    """
+    # Decide automaticamente: texto extraível → extração local (0 tokens extras);
+    # PDF digitalizado → envia o PDF à IA, que lê as páginas nativamente (OCR).
+    usar_pdf_nativo = False
+    if ext == ".pdf":
+        try:
+            info = extractor.analisar_pdf(tr_path)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(422, f"Não foi possível ler o PDF: {e}") from e
+        texto = info["texto"]
+        if extractor.precisa_ocr(info):
+            max_paginas = int(os.getenv("MAX_PDF_PAGINAS", "100"))
+            if info["total_paginas"] > max_paginas:
+                raise HTTPException(422, f"PDF digitalizado com {info['total_paginas']} páginas "
+                                         f"excede o limite de {max_paginas}. Divida o arquivo.")
+            usar_pdf_nativo = True
+    else:
+        texto = extractor.extrair_texto(tr_path)
+
+    if not usar_pdf_nativo:
+        if len(texto.strip()) < 100:
+            raise HTTPException(422, "Não foi possível extrair texto suficiente do arquivo.")
+        max_chars = int(os.getenv("MAX_TR_CHARS", "60000"))
+        texto = extractor.limpar_texto(texto, max_chars)
+
+    try:
+        if usar_pdf_nativo:
+            return generator.gerar_conteudo_pdf(tr_path)
+        return generator.gerar_conteudo(texto)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Falha na geração via IA: {e}") from e
+
+
 @app.post("/api/gerar")
 async def gerar(arquivo: UploadFile, senha: str = Form("")):
     _exigir_senha(senha)
@@ -110,37 +154,7 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
         with tr_path.open("wb") as destino:
             shutil.copyfileobj(arquivo.file, destino)
 
-        # Decide automaticamente: texto extraível → extração local (0 tokens extras);
-        # PDF digitalizado → envia o PDF à IA, que lê as páginas nativamente (OCR).
-        usar_pdf_nativo = False
-        if ext == ".pdf":
-            try:
-                info = extractor.analisar_pdf(tr_path)
-            except Exception as e:  # noqa: BLE001
-                raise HTTPException(422, f"Não foi possível ler o PDF: {e}") from e
-            texto = info["texto"]
-            if extractor.precisa_ocr(info):
-                max_paginas = int(os.getenv("MAX_PDF_PAGINAS", "100"))
-                if info["total_paginas"] > max_paginas:
-                    raise HTTPException(422, f"PDF digitalizado com {info['total_paginas']} páginas "
-                                             f"excede o limite de {max_paginas}. Divida o arquivo.")
-                usar_pdf_nativo = True
-        else:
-            texto = extractor.extrair_texto(tr_path)
-
-        if not usar_pdf_nativo:
-            if len(texto.strip()) < 100:
-                raise HTTPException(422, "Não foi possível extrair texto suficiente do arquivo.")
-            max_chars = int(os.getenv("MAX_TR_CHARS", "60000"))
-            texto = extractor.limpar_texto(texto, max_chars)
-
-        try:
-            if usar_pdf_nativo:
-                dados = generator.gerar_conteudo_pdf(tr_path)
-            else:
-                dados = generator.gerar_conteudo(texto)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"Falha na geração via IA: {e}") from e
+        dados = _analisar_tr(tr_path, ext)
 
         try:
             docs = renderer.gerar_documentos(dados, pasta)
@@ -278,7 +292,7 @@ def download(job_id: str, doc: str):
         raise HTTPException(404, "Documento não encontrado.")
     conteudo = db.baixar_arquivo(caminho)
     prefixo = "Proposta" if doc == "proposta" else "Resumo"
-    nome = f"{prefixo} - {registro.get('titulo', job_id)[:60]}.docx"
+    nome = _nome_download(f"{prefixo} - {registro.get('titulo', job_id)[:60]}.docx")
     return Response(conteudo, media_type=DOCX_MIME,
                     headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
@@ -290,9 +304,81 @@ def download_tr(job_id: str):
     if not caminho:
         raise HTTPException(404, "Arquivo não encontrado.")
     conteudo = db.baixar_arquivo(caminho)
-    nome = registro.get("tr_nome") or "TR.pdf"
+    nome = _nome_download(registro.get("tr_nome") or "TR.pdf")
     return Response(conteudo, media_type="application/octet-stream",
                     headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
+@app.post("/api/followup/{job_id}/tr")
+async def enviar_tr(job_id: str, arquivo: UploadFile, senha: str = Form("")):
+    """Anexa o TR ao processo existente (status 'pendente' → 'enviado')."""
+    _exigir_senha(senha)
+    registro = _obter_ou_404(job_id)
+
+    nome_original = arquivo.filename or "tr.pdf"
+    ext = Path(nome_original).suffix.lower()
+    if ext not in (".pdf", ".docx", ".txt", ".md"):
+        raise HTTPException(400, "Envie um TR em PDF, DOCX ou TXT.")
+
+    caminho = f"{job_id}/TR{ext}"
+    db.upload_arquivo(caminho, await arquivo.read(),
+                      "application/pdf" if ext == ".pdf" else "application/octet-stream")
+
+    arquivos = registro.get("arquivos") or {}
+    arquivos["tr"] = caminho
+    campos = {"arquivos": arquivos, "tr_nome": nome_original}
+    if registro.get("etapa", 0) < 1:
+        campos["etapa"] = 1  # avança para "TR/ETP recebido e validado"
+    db.atualizar_proposta(job_id, campos)
+    return {"ok": True, "tr_url": f"/api/download-tr/{job_id}"}
+
+
+@app.post("/api/followup/{job_id}/gerar")
+async def gerar_no_processo(job_id: str, senha: str = Form("")):
+    """Gera Proposta e Resumo dentro do processo, usando o TR já enviado.
+
+    Mantém o título e o cliente do processo (identidade vem do ofício).
+    """
+    _exigir_senha(senha)
+    registro = _obter_ou_404(job_id)
+    arquivos = registro.get("arquivos") or {}
+    caminho_tr = arquivos.get("tr")
+    if not caminho_tr:
+        raise HTTPException(400, "Envie o TR do processo antes de gerar a proposta.")
+
+    ext = Path(caminho_tr).suffix.lower()
+    with tempfile.TemporaryDirectory() as tmp:
+        pasta = Path(tmp)
+        tr_path = pasta / f"TR{ext}"
+        tr_path.write_bytes(db.baixar_arquivo(caminho_tr))
+
+        dados = _analisar_tr(tr_path, ext)
+
+        try:
+            docs = renderer.gerar_documentos(dados, pasta)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(500, f"Falha ao montar os documentos DOCX: {e}") from e
+
+        try:
+            for nome, caminho in docs.items():
+                arquivos[nome] = f"{job_id}/{DOCS[nome]}"
+                db.upload_arquivo(arquivos[nome], Path(caminho).read_bytes(), DOCX_MIME)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(500, f"Falha ao salvar no storage: {e}") from e
+
+    campos = {"arquivos": arquivos}
+    if registro.get("etapa", 0) < 2:
+        campos["etapa"] = 2  # avança para "Proposta em elaboração"
+    if not registro.get("cliente"):
+        campos["cliente"] = (dados.get("resumo") or {}).get("cliente", "")
+    db.atualizar_proposta(job_id, campos)
+
+    return {
+        "ok": True,
+        "resumo": dados.get("resumo"),
+        "uso_tokens": dados.get("_uso_tokens"),
+        "downloads": {nome: f"/api/download/{job_id}/{nome}" for nome in DOCS},
+    }
 
 
 @app.post("/api/followup/{job_id}/etapa")
@@ -337,8 +423,9 @@ def download_doc(job_id: str, tipo: str):
     if not info:
         raise HTTPException(404, "Documento não encontrado.")
     conteudo = db.baixar_arquivo(info["arquivo"])
+    nome = _nome_download(info["nome"])
     return Response(conteudo, media_type="application/octet-stream",
-                    headers={"Content-Disposition": f'attachment; filename="{info["nome"]}"'})
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 # Em produção, o FastAPI serve o frontend buildado (mesma origem, sem CORS).
