@@ -26,8 +26,8 @@
       <header>
         <img src="/logo.svg" alt="Logo" class="logo logo-mini" />
         <nav>
-          <button class="aba ativa" data-aba="followup" title="Acompanhar os processos pelas fases do fluxo">Follow-up</button>
-          <button class="aba" data-aba="dashboard" title="Indicadores, progresso dos processos e pendências de automação">Dashboard</button>
+          <button class="aba ativa" data-aba="dashboard" title="Indicadores, progresso dos processos e pendências de automação">Dashboard</button>
+          <button class="aba" data-aba="followup" title="Acompanhar os processos pelas fases do fluxo">Follow-up</button>
           <button class="aba" data-aba="arquivos" title="Ver todos os documentos enviados e gerados">Arquivos</button>
         </nav>
         <button id="sair" title="Sair do sistema (pede a senha de novo)">Sair</button>
@@ -35,7 +35,7 @@
 
       <main>
         <!-- ABA FOLLOW-UP -->
-        <section id="aba-followup">
+        <section id="aba-followup" hidden>
           <h2>Follow-up</h2>
           <p class="sub">O processo abre com o Ofício; TR e Proposta entram nas fases seguintes.</p>
           <form id="form-projeto" class="item item-col form-projeto">
@@ -162,7 +162,7 @@
         </section>
 
         <!-- ABA DASHBOARD -->
-        <section id="aba-dashboard" hidden>
+        <section id="aba-dashboard">
           <h2>Dashboard</h2>
           <p class="sub">Visão geral dos processos: indicadores, fases e pendências de automação.</p>
 

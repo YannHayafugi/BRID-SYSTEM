@@ -397,6 +397,9 @@ def atualizar_etapa(job_id: str, etapa: int = Form(...), senha: str = Form("")):
     _obter_ou_404(job_id)
     if not 0 <= etapa < len(ETAPAS_FLUXO):
         raise HTTPException(400, "Etapa inválida.")
+    if ETAPAS_FLUXO[etapa]["tipo"] == "auto":
+        raise HTTPException(400, "As fases automatizadas são definidas pelos documentos do processo "
+                                 "(Ofício, TR e Proposta) — selecione apenas fases manuais.")
     db.atualizar_proposta(job_id, {"etapa": etapa})
     return {"ok": True, "etapa": etapa, "nome": ETAPAS_FLUXO[etapa]["nome"]}
 

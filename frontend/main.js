@@ -336,7 +336,7 @@ function renderFollowup(p, etapas) {
   const fu = p.followup || { etapa: 2, documentos: {} };
   const pct = etapas.length ? Math.round(((fu.etapa + 1) / etapas.length) * 100) : 0;
   const opcoes = etapas
-    .map((e, i) => `<option value="${i}" ${i === fu.etapa ? "selected" : ""}>${i + 1}. ${e.nome} ${e.tipo === "auto" ? "🤖" : "✋"}</option>`)
+    .map((e, i) => `<option value="${i}" ${i === fu.etapa ? "selected" : ""} ${e.tipo === "auto" ? "disabled" : ""}>${i + 1}. ${e.nome} ${e.tipo === "auto" ? "🤖 (automática)" : "✋"}</option>`)
     .join("");
   const tipoAtual = (etapas[fu.etapa] || {}).tipo || "manual";
   const badge = tipoAtual === "auto"
@@ -369,7 +369,7 @@ function renderFollowup(p, etapas) {
         <span class="detalhe">${p.cliente ? p.cliente + " — " : ""}${fmtData(p.data)}</span>
       </div>
       <div class="fu-progresso" title="Progresso: fase ${fu.etapa + 1} de ${etapas.length}"><div class="fu-barra" style="width:${pct}%"></div></div>
-      <select class="fu-etapa" data-job="${p.job_id}" title="Selecionar a fase atual do processo no fluxo">${opcoes}</select>
+      <select class="fu-etapa" data-job="${p.job_id}" title="Fases 🤖 avançam sozinhas conforme os documentos entram; selecione apenas as fases manuais ✋">${opcoes}</select>
       <div class="fu-docs">
         <span class="detalhe">Documentos essenciais:</span>
         <div class="downloads">${docOficio}${docTR}${docProposta}</div>
