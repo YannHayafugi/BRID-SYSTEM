@@ -166,12 +166,12 @@ async function carregarListas() {
           <strong>📄 ${p.tr_nome}</strong>
           <span class="detalhe">${fmtData(p.data)} — gerou: ${p.titulo}</span>
         </div>
-        <a class="btn-dl btn-sec" href="${p.tr_url}">⬇ Baixar TR</a>
+        <a class="btn-dl btn-sec" href="${p.tr_url}" title="Baixar o Termo de Referência original">⬇ Baixar TR</a>
       </div>`
     );
 
     const links = Object.entries(p.downloads)
-      .map(([nome, url]) => `<a class="btn-dl" href="${url}">⬇ ${nome === "proposta" ? "Proposta" : "Resumo"}.docx</a>`)
+      .map(([nome, url]) => `<a class="btn-dl" href="${url}" title="Baixar ${nome === "proposta" ? "a proposta completa" : "o resumo executivo"} (.docx)">⬇ ${nome === "proposta" ? "Proposta" : "Resumo"}.docx</a>`)
       .join("");
     gerados.insertAdjacentHTML(
       "beforeend",
@@ -262,26 +262,27 @@ function renderFollowup(p, etapas) {
 
   const oficio = (fu.documentos || {}).oficio;
   const docOficio = oficio
-    ? `<a class="btn-dl btn-sec" href="/api/download-doc/${p.job_id}/oficio">📎 Ofício</a>
-       <label class="btn-doc">↻ Substituir<input type="file" hidden data-job="${p.job_id}" class="up-oficio" /></label>`
-    : `<label class="btn-doc pendente">＋ Anexar Ofício<input type="file" hidden data-job="${p.job_id}" class="up-oficio" /></label>`;
+    ? `<a class="btn-dl btn-sec" href="/api/download-doc/${p.job_id}/oficio" title="Baixar o ofício anexado a este processo">📎 Ofício</a>
+       <label class="btn-doc" title="Enviar outro arquivo no lugar do ofício atual">↻ Substituir<input type="file" hidden data-job="${p.job_id}" class="up-oficio" /></label>`
+    : `<label class="btn-doc pendente" title="Enviar o arquivo do ofício deste processo (PDF, DOCX ou imagem)">＋ Anexar Ofício<input type="file" hidden data-job="${p.job_id}" class="up-oficio" /></label>`;
 
   const docTR = p.tr_url
-    ? `<a class="btn-dl btn-sec" href="${p.tr_url}">📎 Termo de Referência</a>`
-    : `<span class="btn-doc pendente">TR pendente</span>`;
+    ? `<a class="btn-dl btn-sec" href="${p.tr_url}" title="Baixar o Termo de Referência enviado">📎 Termo de Referência</a>`
+    : `<span class="btn-doc pendente" title="Este processo ainda não tem TR — ele entra quando a proposta for gerada">TR pendente</span>`;
   const docProposta = (p.downloads || {}).proposta
-    ? `<a class="btn-dl btn-sec" href="${p.downloads.proposta}">📎 Proposta</a>`
-    : `<span class="btn-doc pendente">Proposta pendente</span>`;
+    ? `<a class="btn-dl btn-sec" href="${p.downloads.proposta}" title="Baixar a proposta gerada (.docx)">📎 Proposta</a>`
+    : `<span class="btn-doc pendente" title="A proposta aparece aqui depois de gerada no Gerador de Proposta">Proposta pendente</span>`;
 
   $("lista-followup").insertAdjacentHTML(
     "beforeend",
     `<div class="item item-col">
       <div class="fu-topo">
+        <button type="button" class="fu-excluir" data-job="${p.job_id}" data-titulo="${p.titulo.replace(/"/g, "&quot;")}" title="Excluir este processo e seus arquivos">🗑</button>
         <strong>${p.titulo}</strong>
         <span class="detalhe">${p.cliente ? p.cliente + " — " : ""}${fmtData(p.data)}</span>
       </div>
-      <div class="fu-progresso"><div class="fu-barra" style="width:${pct}%"></div></div>
-      <select class="fu-etapa" data-job="${p.job_id}">${opcoes}</select>
+      <div class="fu-progresso" title="Progresso: fase ${fu.etapa + 1} de ${etapas.length}"><div class="fu-barra" style="width:${pct}%"></div></div>
+      <select class="fu-etapa" data-job="${p.job_id}" title="Selecionar a fase atual do processo no fluxo">${opcoes}</select>
       <div class="fu-docs">
         <span class="detalhe">Documentos essenciais:</span>
         <div class="downloads">${docOficio}${docTR}${docProposta}</div>
@@ -289,6 +290,17 @@ function renderFollowup(p, etapas) {
     </div>`
   );
 }
+
+// excluir processo (com confirmação)
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".fu-excluir");
+  if (!btn) return;
+  if (!confirm(`Excluir o processo "${btn.dataset.titulo}"?\n\nOs arquivos gerados dele também serão removidos. Esta ação não pode ser desfeita.`)) return;
+  const r = await fetch(`/api/projetos/${btn.dataset.job}`, { method: "DELETE", headers: { "X-Senha": senha } });
+  if (r.status === 401) return mostrarLogin();
+  if (!r.ok) alert((await r.json().catch(() => ({}))).detail || "Erro ao excluir.");
+  carregarListas();
+});
 
 document.addEventListener("change", async (e) => {
   // mudança de etapa

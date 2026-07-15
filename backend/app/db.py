@@ -47,6 +47,15 @@ def atualizar_proposta(job_id: str, campos: dict):
     _cli().table(TABELA).update(campos).eq("job_id", job_id).execute()
 
 
+def deletar_proposta(job_id: str):
+    _cli().table(TABELA).delete().eq("job_id", job_id).execute()
+
+
+def remover_arquivos(caminhos: list[str]):
+    if caminhos:
+        _cli().storage.from_(BUCKET).remove(caminhos)
+
+
 # ---------- ofícios ----------
 
 def salvar_oficio(registro: dict):

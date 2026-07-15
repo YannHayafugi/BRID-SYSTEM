@@ -223,6 +223,30 @@ async def criar_projeto(titulo: str = Form(...), cliente: str = Form(""),
     return {"ok": True, "job_id": job_id, "etapa": 0, "nome": ETAPAS_FLUXO[0]}
 
 
+@app.delete("/api/projetos/{job_id}")
+def excluir_projeto(job_id: str, x_senha: str | None = Header(default=None)):
+    """Exclui o processo, seus arquivos gerados e anexos exclusivos.
+
+    Ofícios do catálogo (gp_oficios, caminhos 'oficios/...') são compartilhados
+    e permanecem disponíveis para outros processos.
+    """
+    _exigir_senha(x_senha)
+    registro = _obter_ou_404(job_id)
+
+    caminhos = list((registro.get("arquivos") or {}).values())
+    for info in (registro.get("documentos") or {}).values():
+        caminho = info.get("arquivo", "")
+        if caminho.startswith(f"{job_id}/"):
+            caminhos.append(caminho)
+    try:
+        db.remover_arquivos(caminhos)
+    except Exception as e:  # noqa: BLE001
+        print(f"[aviso] arquivos do processo {job_id} não removidos do storage: {e}")
+
+    db.deletar_proposta(job_id)
+    return {"ok": True}
+
+
 @app.get("/api/propostas")
 def listar_propostas(x_senha: str | None = Header(default=None)):
     _exigir_senha(x_senha)

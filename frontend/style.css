@@ -198,3 +198,13 @@ dd { margin: 0; }
 .atalhos { border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 6px; width: 100%; }
 .atalhos .btn-doc { background: #f8fafc; color: #5a6b7b; border-color: #b3c2d1; }
 .atalhos .btn-doc:hover { background: #eef4ff; color: #2563eb; border-color: #2563eb; }
+
+/* ---------- excluir processo ---------- */
+.fu-topo { position: relative; padding-right: 40px; }
+.fu-excluir {
+  position: absolute; top: 0; right: 0;
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; padding: 4px 8px; border-radius: 8px;
+  opacity: 0.45; transition: opacity 0.15s, background 0.15s;
+}
+.fu-excluir:hover { opacity: 1; background: #fee2e2; }

@@ -14,8 +14,8 @@
         <h1>Gerador de Propostas</h1>
         <p class="sub">Acesse com sua senha</p>
         <form id="form-login">
-          <input type="password" id="senha-login" placeholder="Senha" autocomplete="current-password" required />
-          <button type="submit">Entrar</button>
+          <input type="password" id="senha-login" placeholder="Senha" autocomplete="current-password" required title="Senha de acesso ao sistema" />
+          <button type="submit" title="Entrar no sistema">Entrar</button>
           <p id="erro-login" class="erro-texto" hidden></p>
         </form>
       </div>
@@ -26,12 +26,12 @@
       <header>
         <img src="/logo.svg" alt="Logo" class="logo logo-mini" />
         <nav>
-          <button class="aba ativa" data-aba="followup">Follow-up</button>
-          <button class="aba" data-aba="gerador">Gerador de Proposta</button>
-          <button class="aba" data-aba="oficios">Gerador de Ofício</button>
-          <button class="aba" data-aba="arquivos">Arquivos</button>
+          <button class="aba ativa" data-aba="followup" title="Acompanhar os processos pelas fases do fluxo">Follow-up</button>
+          <button class="aba" data-aba="gerador" title="Gerar proposta e resumo a partir de um TR">Gerador de Proposta</button>
+          <button class="aba" data-aba="oficios" title="Gerar ofício de formalização (.docx)">Gerador de Ofício</button>
+          <button class="aba" data-aba="arquivos" title="Ver todos os documentos enviados e gerados">Arquivos</button>
         </nav>
-        <button id="sair">Sair</button>
+        <button id="sair" title="Sair do sistema (pede a senha de novo)">Sair</button>
       </header>
 
       <main>
@@ -41,19 +41,19 @@
           <p class="sub">O processo abre com o Ofício; TR e Proposta entram nas fases seguintes.</p>
           <form id="form-projeto" class="item item-col form-projeto">
             <strong>Abrir novo processo</strong>
-            <select id="pj-oficio-sel">
+            <select id="pj-oficio-sel" title="Escolher um ofício já gerado — o título e o cliente se preenchem sozinhos">
               <option value="">— Selecionar ofício gerado (preenche título e cliente) —</option>
             </select>
-            <input id="pj-titulo" placeholder="Título do processo *" required />
-            <input id="pj-cliente" placeholder="Cliente / órgão (opcional)" />
+            <input id="pj-titulo" placeholder="Título do processo *" required title="Nome do processo no Follow-up (vem do assunto do ofício, mas pode editar)" />
+            <input id="pj-cliente" placeholder="Cliente / órgão (opcional)" title="Cliente ou órgão contratante (vem do destinatário do ofício, mas pode editar)" />
             <div class="downloads">
-              <label class="btn-doc">＋ Anexar ofício externo (opcional)<input type="file" id="pj-oficio" hidden accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" /></label>
+              <label class="btn-doc" title="Anexar um ofício que não foi gerado pelo sistema (PDF, DOCX ou imagem)">＋ Anexar ofício externo (opcional)<input type="file" id="pj-oficio" hidden accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" /></label>
               <span id="pj-oficio-nome" class="detalhe"></span>
             </div>
-            <button type="submit" id="btn-projeto">Abrir processo</button>
+            <button type="submit" id="btn-projeto" title="Criar o processo na fase 'Abertura do processo (Ofício)'">Abrir processo</button>
             <div class="downloads atalhos">
-              <button type="button" id="ir-oficio" class="btn-doc">📝 Gerar Ofício →</button>
-              <button type="button" id="ir-proposta" class="btn-doc">📄 Gerar Proposta →</button>
+              <button type="button" id="ir-oficio" class="btn-doc" title="Ir para o Gerador de Ofício">📝 Gerar Ofício →</button>
+              <button type="button" id="ir-proposta" class="btn-doc" title="Ir para o Gerador de Proposta">📄 Gerar Proposta →</button>
             </div>
           </form>
           <div id="lista-followup" class="lista"></div>
@@ -64,18 +64,18 @@
           <h2>Nova Proposta</h2>
           <p class="sub">Envie um Termo de Referência (PDF, DOCX ou TXT).</p>
           <form id="form">
-            <label id="dropzone" for="arquivo">
+            <label id="dropzone" for="arquivo" title="Enviar o Termo de Referência (PDF, DOCX ou TXT)">
               <span id="dz-texto">Arraste o TR aqui ou clique para selecionar</span>
               <input type="file" id="arquivo" accept=".pdf,.docx,.txt,.md" hidden />
             </label>
-            <button type="submit" id="btn" disabled>Gerar Proposta</button>
+            <button type="submit" id="btn" disabled title="Analisar o TR com IA e gerar a Proposta e o Resumo (30–90 s)">Gerar Proposta</button>
           </form>
           <div id="status" hidden></div>
           <div id="resultado" hidden>
             <h3 id="titulo-proposta"></h3>
             <div class="downloads">
-              <a id="dl-proposta" class="btn-dl">⬇ Baixar Proposta.docx</a>
-              <a id="dl-resumo" class="btn-dl">⬇ Baixar Resumo.docx</a>
+              <a id="dl-proposta" class="btn-dl" title="Baixar a proposta completa (.docx)">⬇ Baixar Proposta.docx</a>
+              <a id="dl-resumo" class="btn-dl" title="Baixar o resumo executivo (.docx)">⬇ Baixar Resumo.docx</a>
             </div>
             <dl id="resumo-info"></dl>
           </div>
@@ -157,7 +157,7 @@
               </div>
               <label>Assinatura <input id="of-assinatura" /></label>
             </details>
-            <button type="submit" id="btn-oficio">Gerar Ofício (.docx)</button>
+            <button type="submit" id="btn-oficio" title="Montar o ofício com o layout FIA e baixar o .docx">Gerar Ofício (.docx)</button>
           </form>
           <div id="status-oficio" hidden></div>
         </section>
