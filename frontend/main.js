@@ -47,8 +47,8 @@ document.querySelectorAll(".aba").forEach((btn) =>
   btn.addEventListener("click", () => {
     document.querySelectorAll(".aba").forEach((b) => b.classList.remove("ativa"));
     btn.classList.add("ativa");
-    ["gerador", "oficios", "enviados", "gerados"].forEach((n) => ($(`aba-${n}`).hidden = n !== btn.dataset.aba));
-    if (["enviados", "gerados"].includes(btn.dataset.aba)) carregarListas();
+    ["gerador", "oficios", "enviados", "gerados", "followup"].forEach((n) => ($(`aba-${n}`).hidden = n !== btn.dataset.aba));
+    if (["enviados", "gerados", "followup"].includes(btn.dataset.aba)) carregarListas();
   })
 );
 
@@ -137,17 +137,22 @@ function fmtData(iso) {
 async function carregarListas() {
   const resp = await fetch("/api/propostas", { headers: { "X-Senha": senha } });
   if (resp.status === 401) return mostrarLogin();
-  const { propostas } = await resp.json();
+  const { propostas, etapas } = await resp.json();
 
   const enviados = $("lista-enviados");
   const gerados = $("lista-gerados");
+  const followup = $("lista-followup");
   enviados.innerHTML = "";
   gerados.innerHTML = "";
+  followup.innerHTML = "";
 
   if (!propostas.length) {
-    enviados.innerHTML = gerados.innerHTML = "<p class='vazio'>Nenhuma proposta gerada ainda.</p>";
+    enviados.innerHTML = gerados.innerHTML = followup.innerHTML =
+      "<p class='vazio'>Nenhuma proposta gerada ainda.</p>";
     return;
   }
+
+  for (const p of propostas) renderFollowup(p, etapas || []);
 
   for (const p of propostas) {
     enviados.insertAdjacentHTML(
@@ -176,6 +181,67 @@ async function carregarListas() {
     );
   }
 }
+
+// ---------- follow-up ----------
+function renderFollowup(p, etapas) {
+  const fu = p.followup || { etapa: 2, documentos: {} };
+  const pct = etapas.length ? Math.round(((fu.etapa + 1) / etapas.length) * 100) : 0;
+  const opcoes = etapas
+    .map((e, i) => `<option value="${i}" ${i === fu.etapa ? "selected" : ""}>${i + 1}. ${e}</option>`)
+    .join("");
+
+  const oficio = (fu.documentos || {}).oficio;
+  const docOficio = oficio
+    ? `<a class="btn-dl btn-sec" href="/api/download-doc/${p.job_id}/oficio">📎 Ofício</a>
+       <label class="btn-doc">↻ Substituir<input type="file" hidden data-job="${p.job_id}" class="up-oficio" /></label>`
+    : `<label class="btn-doc pendente">＋ Anexar Ofício<input type="file" hidden data-job="${p.job_id}" class="up-oficio" /></label>`;
+
+  const docTR = p.tr_url
+    ? `<a class="btn-dl btn-sec" href="${p.tr_url}">📎 Termo de Referência</a>`
+    : `<span class="btn-doc pendente">TR pendente</span>`;
+  const docProposta = (p.downloads || {}).proposta
+    ? `<a class="btn-dl btn-sec" href="${p.downloads.proposta}">📎 Proposta</a>`
+    : `<span class="btn-doc pendente">Proposta pendente</span>`;
+
+  $("lista-followup").insertAdjacentHTML(
+    "beforeend",
+    `<div class="item item-col">
+      <div class="fu-topo">
+        <strong>${p.titulo}</strong>
+        <span class="detalhe">${p.cliente ? p.cliente + " — " : ""}${fmtData(p.data)}</span>
+      </div>
+      <div class="fu-progresso"><div class="fu-barra" style="width:${pct}%"></div></div>
+      <select class="fu-etapa" data-job="${p.job_id}">${opcoes}</select>
+      <div class="fu-docs">
+        <span class="detalhe">Documentos essenciais:</span>
+        <div class="downloads">${docOficio}${docTR}${docProposta}</div>
+      </div>
+    </div>`
+  );
+}
+
+document.addEventListener("change", async (e) => {
+  // mudança de etapa
+  if (e.target.classList.contains("fu-etapa")) {
+    const fd = new FormData();
+    fd.append("etapa", e.target.value);
+    fd.append("senha", senha);
+    const r = await fetch(`/api/followup/${e.target.dataset.job}/etapa`, { method: "POST", body: fd });
+    if (r.status === 401) return mostrarLogin();
+    carregarListas();
+  }
+  // upload de ofício
+  if (e.target.classList.contains("up-oficio") && e.target.files.length) {
+    const fd = new FormData();
+    fd.append("arquivo", e.target.files[0]);
+    fd.append("tipo", "oficio");
+    fd.append("senha", senha);
+    const r = await fetch(`/api/followup/${e.target.dataset.job}/documento`, { method: "POST", body: fd });
+    if (r.status === 401) return mostrarLogin();
+    if (!r.ok) alert((await r.json().catch(() => ({}))).detail || "Erro ao anexar.");
+    carregarListas();
+  }
+});
 
 // ---------- ofícios ----------
 const OFICIO_PADRAO = {

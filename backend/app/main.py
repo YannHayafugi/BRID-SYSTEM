@@ -36,6 +36,39 @@ _output_padrao = "/tmp/output" if os.getenv("VERCEL") else str(Path(__file__).re
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", _output_padrao))
 DOCS = {"proposta": "Proposta.docx", "resumo": "Resumo.docx"}
 
+# Macrofases do fluxo de projetos públicos (Fluxograma Macro)
+ETAPAS_FLUXO = [
+    "Demanda aberta / análise do objeto",
+    "TR/ETP em elaboração e validação",
+    "Proposta em elaboração",
+    "Proposta enviada / em ajustes",
+    "Contrato assinado",
+    "Kick-off realizado",
+    "Em execução (dados e serviços)",
+    "Relatório em validação",
+    "Aprovado / Faturamento",
+]
+
+# Documentos essenciais do follow-up anexáveis manualmente
+DOCS_FOLLOWUP = ("oficio",)
+
+
+def _followup_padrao() -> dict:
+    return {"etapa": 2, "documentos": {}}
+
+
+def _ler_meta(pasta: Path) -> dict | None:
+    meta_path = pasta / "meta.json"
+    if not meta_path.exists():
+        return None
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.setdefault("followup", _followup_padrao())
+    return meta
+
+
+def _salvar_meta(pasta: Path, meta: dict):
+    (pasta / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+
 
 def _senha_ok(senha: str) -> bool:
     esperada = os.getenv("APP_SENHA", "")
@@ -132,8 +165,9 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
         "data": datetime.now().isoformat(timespec="seconds"),
         "tr_nome": nome_original,
         "tr_arquivo": tr_path.name,
+        "followup": _followup_padrao(),
     }
-    (pasta / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    _salvar_meta(pasta, meta)
 
     return {
         "job_id": job_id,
@@ -150,10 +184,9 @@ def listar_propostas(x_senha: str | None = Header(default=None)):
     itens = []
     if OUTPUT_DIR.exists():
         for pasta in OUTPUT_DIR.iterdir():
-            meta_path = pasta / "meta.json"
-            if not meta_path.exists():
+            meta = _ler_meta(pasta)
+            if meta is None:
                 continue
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
             job_id = meta["job_id"]
             itens.append({
                 **meta,
@@ -162,7 +195,67 @@ def listar_propostas(x_senha: str | None = Header(default=None)):
                               for nome in DOCS if (pasta / DOCS[nome]).exists()},
             })
     itens.sort(key=lambda i: i["data"], reverse=True)
-    return {"propostas": itens}
+    return {"propostas": itens, "etapas": ETAPAS_FLUXO}
+
+
+@app.post("/api/followup/{job_id}/etapa")
+def atualizar_etapa(job_id: str, etapa: int = Form(...), senha: str = Form("")):
+    _exigir_senha(senha)
+    if not job_id.isalnum():
+        raise HTTPException(404, "Proposta não encontrada.")
+    pasta = OUTPUT_DIR / job_id
+    meta = _ler_meta(pasta)
+    if meta is None:
+        raise HTTPException(404, "Proposta não encontrada.")
+    if not 0 <= etapa < len(ETAPAS_FLUXO):
+        raise HTTPException(400, "Etapa inválida.")
+    meta["followup"]["etapa"] = etapa
+    _salvar_meta(pasta, meta)
+    return {"ok": True, "etapa": etapa, "nome": ETAPAS_FLUXO[etapa]}
+
+
+@app.post("/api/followup/{job_id}/documento")
+async def anexar_documento(job_id: str, arquivo: UploadFile,
+                           tipo: str = Form(...), senha: str = Form("")):
+    _exigir_senha(senha)
+    if tipo not in DOCS_FOLLOWUP:
+        raise HTTPException(400, f"Tipo inválido. Use: {', '.join(DOCS_FOLLOWUP)}.")
+    if not job_id.isalnum():
+        raise HTTPException(404, "Proposta não encontrada.")
+    pasta = OUTPUT_DIR / job_id
+    meta = _ler_meta(pasta)
+    if meta is None:
+        raise HTTPException(404, "Proposta não encontrada.")
+
+    nome_original = arquivo.filename or f"{tipo}.pdf"
+    ext = Path(nome_original).suffix.lower()
+    if ext not in (".pdf", ".docx", ".doc", ".txt", ".png", ".jpg", ".jpeg"):
+        raise HTTPException(400, "Formato não suportado.")
+
+    destino = pasta / f"DOC_{tipo}{ext}"
+    with destino.open("wb") as f:
+        shutil.copyfileobj(arquivo.file, f)
+
+    meta["followup"].setdefault("documentos", {})[tipo] = {
+        "nome": nome_original, "arquivo": destino.name,
+        "data": datetime.now().isoformat(timespec="seconds"),
+    }
+    _salvar_meta(pasta, meta)
+    return {"ok": True, "url": f"/api/download-doc/{job_id}/{tipo}"}
+
+
+@app.get("/api/download-doc/{job_id}/{tipo}")
+def download_doc(job_id: str, tipo: str):
+    if tipo not in DOCS_FOLLOWUP or not job_id.isalnum():
+        raise HTTPException(404, "Documento não encontrado.")
+    pasta = OUTPUT_DIR / job_id
+    meta = _ler_meta(pasta)
+    if meta is None:
+        raise HTTPException(404, "Documento não encontrado.")
+    info = meta["followup"].get("documentos", {}).get(tipo)
+    if not info or not (pasta / info["arquivo"]).exists():
+        raise HTTPException(404, "Documento não encontrado.")
+    return FileResponse(pasta / info["arquivo"], filename=info["nome"])
 
 
 @app.get("/api/download/{job_id}/{doc}")
