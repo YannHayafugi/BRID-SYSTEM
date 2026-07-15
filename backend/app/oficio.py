@@ -220,8 +220,45 @@ def gerar_oficio(dados: OficioData, x_senha: str | None = Header(default=None)):
     except Exception as e:  # noqa: BLE001
         raise HTTPException(500, f"Falha ao gerar o ofício: {e}") from e
     nome = f"Oficio - Contrato {dados.numero_contrato}.docx".replace("/", "-")
+
+    # Persiste no Supabase (melhor esforço): alimenta o drop do Follow-up.
+    oficio_id = ""
+    try:
+        import uuid
+        from datetime import datetime
+
+        from . import db
+
+        oficio_id = uuid.uuid4().hex[:12]
+        caminho = f"oficios/{oficio_id}/{nome}"
+        db.upload_arquivo(caminho, conteudo,
+                          "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        db.salvar_oficio({
+            "id": oficio_id,
+            "assunto": dados.assunto,
+            "destinatario": dados.destinatario_nome,
+            "contrato": dados.numero_contrato,
+            "data": datetime.now().isoformat(timespec="seconds"),
+            "arquivo": caminho,
+        })
+    except Exception as e:  # noqa: BLE001
+        print(f"[aviso] ofício gerado mas não persistido: {e}")
+        oficio_id = ""
+
     return StreamingResponse(
         BytesIO(conteudo),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+        headers={"Content-Disposition": f'attachment; filename="{nome}"',
+                 "X-Oficio-Id": oficio_id},
     )
+
+
+@router.get("/api/oficios")
+def listar_oficios(x_senha: str | None = Header(default=None)):
+    if not _senha_ok(x_senha or ""):
+        raise HTTPException(401, "Não autorizado. Faça login novamente.")
+    try:
+        from . import db
+        return {"oficios": db.listar_oficios()}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"Falha ao listar ofícios: {e}") from e

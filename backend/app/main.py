@@ -182,7 +182,8 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
 
 @app.post("/api/projetos")
 async def criar_projeto(titulo: str = Form(...), cliente: str = Form(""),
-                        senha: str = Form(""), arquivo: UploadFile | None = File(None)):
+                        senha: str = Form(""), oficio_id: str = Form(""),
+                        arquivo: UploadFile | None = File(None)):
     """Abre um processo no Follow-up a partir do Ofício, antes de existir TR/proposta."""
     _exigir_senha(senha)
     if not titulo.strip():
@@ -190,7 +191,17 @@ async def criar_projeto(titulo: str = Form(...), cliente: str = Form(""),
 
     job_id = uuid.uuid4().hex[:12]
     documentos = {}
-    if arquivo and arquivo.filename:
+    if oficio_id.strip():
+        # vincula um ofício já gerado pelo sistema (drop do Follow-up)
+        reg_oficio = db.obter_oficio(oficio_id.strip())
+        if reg_oficio is None:
+            raise HTTPException(404, "Ofício selecionado não encontrado.")
+        documentos["oficio"] = {
+            "nome": Path(reg_oficio["arquivo"]).name,
+            "arquivo": reg_oficio["arquivo"],
+            "data": reg_oficio["data"],
+        }
+    elif arquivo and arquivo.filename:
         ext = Path(arquivo.filename).suffix.lower()
         if ext not in (".pdf", ".docx", ".doc", ".txt", ".png", ".jpg", ".jpeg"):
             raise HTTPException(400, "Formato do ofício não suportado.")

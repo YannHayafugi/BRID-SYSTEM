@@ -41,13 +41,20 @@
           <p class="sub">O processo abre com o Ofício; TR e Proposta entram nas fases seguintes.</p>
           <form id="form-projeto" class="item item-col form-projeto">
             <strong>Abrir novo processo</strong>
+            <select id="pj-oficio-sel">
+              <option value="">— Selecionar ofício gerado (preenche título e cliente) —</option>
+            </select>
             <input id="pj-titulo" placeholder="Título do processo *" required />
             <input id="pj-cliente" placeholder="Cliente / órgão (opcional)" />
             <div class="downloads">
-              <label class="btn-doc">＋ Ofício de abertura (opcional)<input type="file" id="pj-oficio" hidden accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" /></label>
+              <label class="btn-doc">＋ Anexar ofício externo (opcional)<input type="file" id="pj-oficio" hidden accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" /></label>
               <span id="pj-oficio-nome" class="detalhe"></span>
             </div>
             <button type="submit" id="btn-projeto">Abrir processo</button>
+            <div class="downloads atalhos">
+              <button type="button" id="ir-oficio" class="btn-doc">📝 Gerar Ofício →</button>
+              <button type="button" id="ir-proposta" class="btn-doc">📄 Gerar Proposta →</button>
+            </div>
           </form>
           <div id="lista-followup" class="lista"></div>
         </section>

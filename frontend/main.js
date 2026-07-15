@@ -16,6 +16,7 @@ function mostrarApp() {
   $("tela-login").hidden = true;
   $("app").hidden = false;
   carregarListas(); // aba inicial é o Follow-up
+  carregarOficios();
 }
 
 function mostrarLogin() {
@@ -50,6 +51,7 @@ document.querySelectorAll(".aba").forEach((btn) =>
     btn.classList.add("ativa");
     ["followup", "gerador", "oficios", "arquivos"].forEach((n) => ($(`aba-${n}`).hidden = n !== btn.dataset.aba));
     if (["followup", "arquivos"].includes(btn.dataset.aba)) carregarListas();
+    if (btn.dataset.aba === "followup") carregarOficios();
   })
 );
 
@@ -188,8 +190,43 @@ async function carregarListas() {
 }
 
 // ---------- abrir processo (ofício) ----------
+let oficiosGerados = [];
+
+async function carregarOficios() {
+  try {
+    const r = await fetch("/api/oficios", { headers: { "X-Senha": senha } });
+    if (!r.ok) return;
+    oficiosGerados = (await r.json()).oficios || [];
+    const sel = $("pj-oficio-sel");
+    const atual = sel.value;
+    sel.options.length = 1; // mantém só o placeholder
+    for (const o of oficiosGerados) {
+      const opt = document.createElement("option");
+      opt.value = o.id;
+      opt.textContent = `${o.assunto || "Sem assunto"} — ${o.destinatario} (${fmtData(o.data)})`;
+      sel.appendChild(opt);
+    }
+    sel.value = atual;
+  } catch { /* drop fica vazio; anexo externo continua disponível */ }
+}
+
+// de-para: Título ← Assunto | Cliente ← Destinatário
+$("pj-oficio-sel").addEventListener("change", () => {
+  const o = oficiosGerados.find((x) => x.id === $("pj-oficio-sel").value);
+  if (!o) return;
+  $("pj-titulo").value = o.assunto || "";
+  $("pj-cliente").value = o.destinatario || "";
+  $("pj-oficio").value = ""; // ofício gerado dispensa o anexo externo
+  $("pj-oficio-nome").textContent = "";
+});
+
+// atalhos de navegação
+$("ir-oficio").addEventListener("click", () => document.querySelector('.aba[data-aba="oficios"]').click());
+$("ir-proposta").addEventListener("click", () => document.querySelector('.aba[data-aba="gerador"]').click());
+
 $("pj-oficio").addEventListener("change", () => {
   $("pj-oficio-nome").textContent = $("pj-oficio").files.length ? `📎 ${$("pj-oficio").files[0].name}` : "";
+  if ($("pj-oficio").files.length) $("pj-oficio-sel").value = ""; // anexo externo dispensa o drop
 });
 
 $("form-projeto").addEventListener("submit", async (e) => {
@@ -199,6 +236,7 @@ $("form-projeto").addEventListener("submit", async (e) => {
   fd.append("titulo", $("pj-titulo").value);
   fd.append("cliente", $("pj-cliente").value);
   fd.append("senha", senha);
+  fd.append("oficio_id", $("pj-oficio-sel").value);
   if ($("pj-oficio").files.length) fd.append("arquivo", $("pj-oficio").files[0]);
   try {
     const r = await fetch("/api/projetos", { method: "POST", body: fd });

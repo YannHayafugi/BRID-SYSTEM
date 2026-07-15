@@ -188,3 +188,13 @@ dd { margin: 0; }
   color: #1c2733;
 }
 .sub-secao:first-of-type { margin-top: 16px; }
+
+/* ---------- drop de ofícios e atalhos ---------- */
+#pj-oficio-sel {
+  width: 100%; padding: 11px 12px; font-size: 14px;
+  border: 1px solid #2563eb; border-radius: 8px;
+  background: #eef4ff; color: #1c2733; cursor: pointer;
+}
+.atalhos { border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 6px; width: 100%; }
+.atalhos .btn-doc { background: #f8fafc; color: #5a6b7b; border-color: #b3c2d1; }
+.atalhos .btn-doc:hover { background: #eef4ff; color: #2563eb; border-color: #2563eb; }

@@ -9,6 +9,7 @@ import os
 from supabase import create_client
 
 TABELA = "gp_propostas"
+TABELA_OFICIOS = "gp_oficios"
 BUCKET = "gp-arquivos"
 
 _client = None
@@ -44,6 +45,21 @@ def obter_proposta(job_id: str) -> dict | None:
 
 def atualizar_proposta(job_id: str, campos: dict):
     _cli().table(TABELA).update(campos).eq("job_id", job_id).execute()
+
+
+# ---------- ofícios ----------
+
+def salvar_oficio(registro: dict):
+    _cli().table(TABELA_OFICIOS).insert(registro).execute()
+
+
+def listar_oficios() -> list[dict]:
+    return _cli().table(TABELA_OFICIOS).select("*").order("data", desc=True).execute().data
+
+
+def obter_oficio(oficio_id: str) -> dict | None:
+    rows = _cli().table(TABELA_OFICIOS).select("*").eq("id", oficio_id).execute().data
+    return rows[0] if rows else None
 
 
 # ---------- storage ----------
