@@ -44,15 +44,16 @@ $("sair").addEventListener("click", mostrarLogin);
 // sessão anterior ainda válida?
 if (senha) tentarLogin(senha).then((ok) => (ok ? mostrarApp() : mostrarLogin()));
 
-// ---------- abas ----------
+// ---------- navegação entre seções ----------
+function mostrarAba(nome) {
+  ["followup", "gerador", "oficios", "arquivos"].forEach((n) => ($(`aba-${n}`).hidden = n !== nome));
+  document.querySelectorAll(".aba").forEach((b) => b.classList.toggle("ativa", b.dataset.aba === nome));
+  if (["followup", "arquivos"].includes(nome)) carregarListas();
+  if (nome === "followup") carregarOficios();
+}
+
 document.querySelectorAll(".aba").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".aba").forEach((b) => b.classList.remove("ativa"));
-    btn.classList.add("ativa");
-    ["followup", "gerador", "oficios", "arquivos"].forEach((n) => ($(`aba-${n}`).hidden = n !== btn.dataset.aba));
-    if (["followup", "arquivos"].includes(btn.dataset.aba)) carregarListas();
-    if (btn.dataset.aba === "followup") carregarOficios();
-  })
+  btn.addEventListener("click", () => mostrarAba(btn.dataset.aba))
 );
 
 // ---------- gerador ----------
@@ -220,9 +221,9 @@ $("pj-oficio-sel").addEventListener("change", () => {
   $("pj-oficio-nome").textContent = "";
 });
 
-// atalhos de navegação
-$("ir-oficio").addEventListener("click", () => document.querySelector('.aba[data-aba="oficios"]').click());
-$("ir-proposta").addEventListener("click", () => document.querySelector('.aba[data-aba="gerador"]').click());
+// atalhos de navegação (o Gerador de Ofício vive dentro do Follow-up)
+$("ir-oficio").addEventListener("click", () => mostrarAba("oficios"));
+$("voltar-followup").addEventListener("click", () => mostrarAba("followup"));
 
 $("pj-oficio").addEventListener("change", () => {
   $("pj-oficio-nome").textContent = $("pj-oficio").files.length ? `📎 ${$("pj-oficio").files[0].name}` : "";
@@ -536,7 +537,8 @@ $("form-oficio").addEventListener("submit", async (e) => {
     a.download = `Oficio - Contrato ${payload.numero_contrato.replace(/\//g, "-")}.docx`;
     a.click();
     URL.revokeObjectURL(url);
-    st.textContent = "✅ Ofício gerado — download iniciado.";
+    st.textContent = "✅ Ofício gerado — download iniciado. Ele já está disponível no drop do Follow-up.";
+    carregarOficios(); // atualiza o drop do "Abrir novo processo"
   } catch (err) {
     st.className = "erro-texto";
     st.textContent = `❌ ${err.message}`;

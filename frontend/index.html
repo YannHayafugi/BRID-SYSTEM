@@ -27,8 +27,6 @@
         <img src="/logo.svg" alt="Logo" class="logo logo-mini" />
         <nav>
           <button class="aba ativa" data-aba="followup" title="Acompanhar os processos pelas fases do fluxo">Follow-up</button>
-          <button class="aba" data-aba="gerador" title="Gerar proposta e resumo a partir de um TR">Gerador de Proposta</button>
-          <button class="aba" data-aba="oficios" title="Gerar ofício de formalização (.docx)">Gerador de Ofício</button>
           <button class="aba" data-aba="arquivos" title="Ver todos os documentos enviados e gerados">Arquivos</button>
         </nav>
         <button id="sair" title="Sair do sistema (pede a senha de novo)">Sair</button>
@@ -52,8 +50,7 @@
             </div>
             <button type="submit" id="btn-projeto" title="Criar o processo na fase 'Abertura do processo (Ofício)'">Abrir processo</button>
             <div class="downloads atalhos">
-              <button type="button" id="ir-oficio" class="btn-doc" title="Ir para o Gerador de Ofício">📝 Gerar Ofício →</button>
-              <button type="button" id="ir-proposta" class="btn-doc" title="Ir para o Gerador de Proposta">📄 Gerar Proposta →</button>
+              <button type="button" id="ir-oficio" class="btn-doc" title="Abrir o Gerador de Ofício (o ofício gerado aparece no drop acima)">📝 Gerar Ofício →</button>
             </div>
           </form>
           <div id="lista-followup" class="lista"></div>
@@ -81,8 +78,9 @@
           </div>
         </section>
 
-        <!-- ABA OFÍCIOS -->
+        <!-- ABA OFÍCIOS (acessada pelo botão 'Gerar Ofício' do Follow-up) -->
         <section id="aba-oficios" hidden>
+          <button type="button" id="voltar-followup" class="btn-doc" title="Voltar para o Follow-up">← Voltar ao Follow-up</button>
           <h2>Gerador de Ofícios</h2>
           <p class="sub">Ofício de formalização de projetos (layout FIA). Os campos já vêm preenchidos com o texto padrão — ajuste o necessário e gere o .docx.</p>
           <form id="form-oficio" class="form-oficio">
