@@ -15,6 +15,7 @@ async function tentarLogin(s) {
 function mostrarApp() {
   $("tela-login").hidden = true;
   $("app").hidden = false;
+  carregarListas(); // aba inicial é o Follow-up
 }
 
 function mostrarLogin() {
@@ -47,8 +48,8 @@ document.querySelectorAll(".aba").forEach((btn) =>
   btn.addEventListener("click", () => {
     document.querySelectorAll(".aba").forEach((b) => b.classList.remove("ativa"));
     btn.classList.add("ativa");
-    ["gerador", "oficios", "enviados", "gerados", "followup"].forEach((n) => ($(`aba-${n}`).hidden = n !== btn.dataset.aba));
-    if (["enviados", "gerados", "followup"].includes(btn.dataset.aba)) carregarListas();
+    ["followup", "gerador", "oficios", "arquivos"].forEach((n) => ($(`aba-${n}`).hidden = n !== btn.dataset.aba));
+    if (["followup", "arquivos"].includes(btn.dataset.aba)) carregarListas();
   })
 );
 

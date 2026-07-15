@@ -26,18 +26,34 @@
       <header>
         <img src="/logo.svg" alt="Logo" class="logo logo-mini" />
         <nav>
-          <button class="aba ativa" data-aba="gerador">Gerador de Proposta</button>
-          <button class="aba" data-aba="oficios">Ofícios</button>
-          <button class="aba" data-aba="enviados">Arquivos Enviados</button>
-          <button class="aba" data-aba="gerados">Arquivos Gerados</button>
-          <button class="aba" data-aba="followup">Follow-up</button>
+          <button class="aba ativa" data-aba="followup">Follow-up</button>
+          <button class="aba" data-aba="gerador">Gerador de Proposta</button>
+          <button class="aba" data-aba="oficios">Gerador de Ofício</button>
+          <button class="aba" data-aba="arquivos">Arquivos</button>
         </nav>
         <button id="sair">Sair</button>
       </header>
 
       <main>
+        <!-- ABA FOLLOW-UP -->
+        <section id="aba-followup">
+          <h2>Follow-up</h2>
+          <p class="sub">O processo abre com o Ofício; TR e Proposta entram nas fases seguintes.</p>
+          <form id="form-projeto" class="item item-col form-projeto">
+            <strong>Abrir novo processo</strong>
+            <input id="pj-titulo" placeholder="Título do processo *" required />
+            <input id="pj-cliente" placeholder="Cliente / órgão (opcional)" />
+            <div class="downloads">
+              <label class="btn-doc">＋ Ofício de abertura (opcional)<input type="file" id="pj-oficio" hidden accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" /></label>
+              <span id="pj-oficio-nome" class="detalhe"></span>
+            </div>
+            <button type="submit" id="btn-projeto">Abrir processo</button>
+          </form>
+          <div id="lista-followup" class="lista"></div>
+        </section>
+
         <!-- ABA GERADOR -->
-        <section id="aba-gerador">
+        <section id="aba-gerador" hidden>
           <h2>Nova Proposta</h2>
           <p class="sub">Envie um Termo de Referência (PDF, DOCX ou TXT).</p>
           <form id="form">
@@ -139,35 +155,16 @@
           <div id="status-oficio" hidden></div>
         </section>
 
-        <!-- ABA ENVIADOS -->
-        <section id="aba-enviados" hidden>
-          <h2>Arquivos Enviados</h2>
-          <p class="sub">Termos de Referência já processados.</p>
+        <!-- ABA ARQUIVOS -->
+        <section id="aba-arquivos" hidden>
+          <h2>Arquivos</h2>
+          <p class="sub">Todos os documentos do sistema, organizados por tipo.</p>
+
+          <h3 class="sub-secao">📥 Enviados — Termos de Referência</h3>
           <div id="lista-enviados" class="lista"></div>
-        </section>
 
-        <!-- ABA GERADOS -->
-        <section id="aba-gerados" hidden>
-          <h2>Arquivos Gerados</h2>
-          <p class="sub">Cada proposta gera dois documentos: a Proposta completa e o Resumo.</p>
+          <h3 class="sub-secao">📤 Gerados — Propostas e Resumos</h3>
           <div id="lista-gerados" class="lista"></div>
-        </section>
-
-        <!-- ABA FOLLOW-UP -->
-        <section id="aba-followup" hidden>
-          <h2>Follow-up</h2>
-          <p class="sub">O processo abre com o Ofício; TR e Proposta entram nas fases seguintes.</p>
-          <form id="form-projeto" class="item item-col form-projeto">
-            <strong>Abrir novo processo</strong>
-            <input id="pj-titulo" placeholder="Título do processo *" required />
-            <input id="pj-cliente" placeholder="Cliente / órgão (opcional)" />
-            <div class="downloads">
-              <label class="btn-doc">＋ Ofício de abertura (opcional)<input type="file" id="pj-oficio" hidden accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" /></label>
-              <span id="pj-oficio-nome" class="detalhe"></span>
-            </div>
-            <button type="submit" id="btn-projeto">Abrir processo</button>
-          </form>
-          <div id="lista-followup" class="lista"></div>
         </section>
       </main>
     </div>

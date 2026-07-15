@@ -179,3 +179,12 @@ dd { margin: 0; }
   border: none; border-radius: 8px; cursor: pointer;
 }
 .form-projeto button:disabled { background: #b3c2d1; }
+
+/* ---------- aba arquivos ---------- */
+.sub-secao {
+  margin: 28px 0 4px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e2e8f0;
+  color: #1c2733;
+}
+.sub-secao:first-of-type { margin-top: 16px; }
