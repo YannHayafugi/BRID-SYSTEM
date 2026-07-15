@@ -40,17 +40,17 @@ DOCS = {"proposta": "Proposta.docx", "resumo": "Resumo.docx"}
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # Macrofases do fluxo de projetos públicos (Fluxograma Macro)
-# O processo abre com o Ofício; na sequência vêm TR e Proposta.
+# tipo "auto": etapa coberta pela automação de documentos do sistema
+# tipo "manual": etapa conduzida fora do sistema (contrato, execução, faturamento)
 ETAPAS_FLUXO = [
-    "Abertura do processo (Ofício)",
-    "TR/ETP recebido e validado",
-    "Proposta em elaboração",
-    "Proposta enviada / em ajustes",
-    "Contrato assinado",
-    "Kick-off realizado",
-    "Em execução (dados e serviços)",
-    "Relatório em validação",
-    "Aprovado / Faturamento",
+    {"nome": "Abertura do processo (Ofício)", "tipo": "auto"},
+    {"nome": "TR/ETP recebido e validado", "tipo": "auto"},
+    {"nome": "Proposta (elaboração e envio)", "tipo": "auto"},
+    {"nome": "Contrato assinado", "tipo": "manual"},
+    {"nome": "Kick-off realizado", "tipo": "manual"},
+    {"nome": "Em execução (dados e serviços)", "tipo": "manual"},
+    {"nome": "Relatório em validação", "tipo": "manual"},
+    {"nome": "Aprovado / Faturamento", "tipo": "manual"},
 ]
 
 # Documentos essenciais do follow-up anexáveis manualmente
@@ -234,7 +234,12 @@ async def criar_projeto(titulo: str = Form(...), cliente: str = Form(""),
         "documentos": documentos,
         "arquivos": {},
     })
-    return {"ok": True, "job_id": job_id, "etapa": 0, "nome": ETAPAS_FLUXO[0]}
+    if oficio_id.strip():
+        try:
+            db.atualizar_oficio(oficio_id.strip(), {"job_id": job_id})  # some do drop
+        except Exception as e:  # noqa: BLE001
+            print(f"[aviso] não foi possível vincular o ofício: {e}")
+    return {"ok": True, "job_id": job_id, "etapa": 0, "nome": ETAPAS_FLUXO[0]["nome"]}
 
 
 @app.delete("/api/projetos/{job_id}")
@@ -256,6 +261,11 @@ def excluir_projeto(job_id: str, x_senha: str | None = Header(default=None)):
         db.remover_arquivos(caminhos)
     except Exception as e:  # noqa: BLE001
         print(f"[aviso] arquivos do processo {job_id} não removidos do storage: {e}")
+
+    try:
+        db.desvincular_oficios(job_id)  # ofício volta ao drop do Follow-up
+    except Exception as e:  # noqa: BLE001
+        print(f"[aviso] ofícios do processo {job_id} não desvinculados: {e}")
 
     db.deletar_proposta(job_id)
     return {"ok": True}
@@ -388,7 +398,7 @@ def atualizar_etapa(job_id: str, etapa: int = Form(...), senha: str = Form("")):
     if not 0 <= etapa < len(ETAPAS_FLUXO):
         raise HTTPException(400, "Etapa inválida.")
     db.atualizar_proposta(job_id, {"etapa": etapa})
-    return {"ok": True, "etapa": etapa, "nome": ETAPAS_FLUXO[etapa]}
+    return {"ok": True, "etapa": etapa, "nome": ETAPAS_FLUXO[etapa]["nome"]}
 
 
 @app.post("/api/followup/{job_id}/documento")

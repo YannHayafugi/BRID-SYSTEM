@@ -27,6 +27,7 @@
         <img src="/logo.svg" alt="Logo" class="logo logo-mini" />
         <nav>
           <button class="aba ativa" data-aba="followup" title="Acompanhar os processos pelas fases do fluxo">Follow-up</button>
+          <button class="aba" data-aba="dashboard" title="Indicadores, progresso dos processos e pendências de automação">Dashboard</button>
           <button class="aba" data-aba="arquivos" title="Ver todos os documentos enviados e gerados">Arquivos</button>
         </nav>
         <button id="sair" title="Sair do sistema (pede a senha de novo)">Sair</button>
@@ -158,6 +159,23 @@
             <button type="submit" id="btn-oficio" title="Montar o ofício com o layout FIA e baixar o .docx">Gerar Ofício (.docx)</button>
           </form>
           <div id="status-oficio" hidden></div>
+        </section>
+
+        <!-- ABA DASHBOARD -->
+        <section id="aba-dashboard" hidden>
+          <h2>Dashboard</h2>
+          <p class="sub">Visão geral dos processos: indicadores, fases e pendências de automação.</p>
+
+          <div id="dash-kpis" class="dash-kpis"></div>
+
+          <h3 class="sub-secao">🔔 Notificações de automação</h3>
+          <div id="dash-notificacoes" class="lista"></div>
+
+          <h3 class="sub-secao">📊 Processos por fase</h3>
+          <div id="dash-fases" class="lista"></div>
+
+          <h3 class="sub-secao">📋 Processos e progresso</h3>
+          <div id="dash-processos" class="lista"></div>
         </section>
 
         <!-- ABA ARQUIVOS -->

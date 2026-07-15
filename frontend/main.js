@@ -46,9 +46,9 @@ if (senha) tentarLogin(senha).then((ok) => (ok ? mostrarApp() : mostrarLogin()))
 
 // ---------- navegação entre seções ----------
 function mostrarAba(nome) {
-  ["followup", "gerador", "oficios", "arquivos"].forEach((n) => ($(`aba-${n}`).hidden = n !== nome));
+  ["followup", "gerador", "oficios", "arquivos", "dashboard"].forEach((n) => ($(`aba-${n}`).hidden = n !== nome));
   document.querySelectorAll(".aba").forEach((b) => b.classList.toggle("ativa", b.dataset.aba === nome));
-  if (["followup", "arquivos"].includes(nome)) carregarListas();
+  if (["followup", "arquivos", "dashboard"].includes(nome)) carregarListas();
   if (nome === "followup") carregarOficios();
 }
 
@@ -153,8 +153,11 @@ async function carregarListas() {
   if (!propostas.length) {
     enviados.innerHTML = gerados.innerHTML = followup.innerHTML =
       "<p class='vazio'>Nenhuma proposta gerada ainda.</p>";
+    renderDashboard([], etapas || []);
     return;
   }
+
+  renderDashboard(propostas, etapas || []);
 
   for (const p of propostas) renderFollowup(p, etapas || []);
 
@@ -188,6 +191,81 @@ async function carregarListas() {
 
   if (!enviados.innerHTML) enviados.innerHTML = "<p class='vazio'>Nenhum TR enviado ainda.</p>";
   if (!gerados.innerHTML) gerados.innerHTML = "<p class='vazio'>Nenhum documento gerado ainda.</p>";
+}
+
+// ---------- dashboard ----------
+function renderDashboard(propostas, etapas) {
+  const kpis = $("dash-kpis");
+  const notif = $("dash-notificacoes");
+  const fases = $("dash-fases");
+  const procs = $("dash-processos");
+  if (!kpis) return;
+
+  const total = propostas.length;
+  const nAuto = etapas.filter((e) => e.tipo === "auto").length || 1;
+
+  const temOficio = (p) => !!(p.followup?.documentos || {}).oficio;
+  const temTR = (p) => !!p.tr_url;
+  const temProposta = (p) => !!(p.downloads || {}).proposta;
+  const docsCompletos = (p) => temOficio(p) && temTR(p) && temProposta(p);
+
+  // ---- KPIs ----
+  const qualidade = total ? Math.round((propostas.filter(docsCompletos).length / total) * 100) : 0;
+  const totalDocs = propostas.reduce((s, p) => s + temOficio(p) + temTR(p) + temProposta(p) + !!(p.downloads || {}).resumo, 0);
+  const eficiencia = total
+    ? Math.round((propostas.reduce((s, p) => s + Math.min((p.followup?.etapa ?? 0) + 1, nAuto) / nAuto, 0) / total) * 100)
+    : 0;
+  const emContrato = propostas.filter((p) => (p.followup?.etapa ?? 0) >= nAuto).length;
+  const concluidos = propostas.filter((p) => (p.followup?.etapa ?? 0) >= etapas.length - 1).length;
+  const eficacia = total ? Math.round((emContrato / total) * 100) : 0;
+
+  kpis.innerHTML = `
+    <div class="kpi" title="Percentual de processos com os 3 documentos essenciais (Ofício, TR e Proposta) completos">
+      <span class="kpi-valor">${qualidade}%</span><span class="kpi-nome">Qualidade</span>
+      <span class="kpi-desc">documentação essencial completa</span></div>
+    <div class="kpi" title="Volume produzido: processos abertos e documentos gerados/anexados pelo sistema">
+      <span class="kpi-valor">${total} <small>proc.</small> · ${totalDocs} <small>docs</small></span><span class="kpi-nome">Produtividade</span>
+      <span class="kpi-desc">processos e documentos no sistema</span></div>
+    <div class="kpi" title="Quanto das fases automatizadas (Ofício → TR → Proposta) já foi percorrido, na média dos processos">
+      <span class="kpi-valor">${eficiencia}%</span><span class="kpi-nome">Eficiência</span>
+      <span class="kpi-desc">aproveitamento da automação</span></div>
+    <div class="kpi" title="Percentual de processos que avançaram além da automação (contrato assinado em diante); entre parênteses, os concluídos">
+      <span class="kpi-valor">${eficacia}% <small>(${concluidos} concl.)</small></span><span class="kpi-nome">Eficácia</span>
+      <span class="kpi-desc">processos convertidos em contrato</span></div>`;
+
+  // ---- notificações de automação ----
+  const avisos = [];
+  for (const p of propostas) {
+    if (!temOficio(p)) avisos.push({ p, msg: "sem Ofício de abertura — gere ou anexe pelo Follow-up", cls: "alerta" });
+    else if (!temTR(p)) avisos.push({ p, msg: "aguardando envio do TR", cls: "alerta" });
+    else if (!temProposta(p)) avisos.push({ p, msg: "TR enviado — pronto para gerar a Proposta 🤖", cls: "pronto" });
+  }
+  notif.innerHTML = avisos.length
+    ? avisos.map((a) => `<div class="item notif ${a.cls}" title="Pendência de automação de documentos">
+        <div><strong>${a.p.titulo}</strong><span class="detalhe">${a.msg}</span></div></div>`).join("")
+    : "<p class='vazio'>✅ Nenhuma pendência de automação — todos os documentos em dia.</p>";
+
+  // ---- processos por fase ----
+  fases.innerHTML = etapas.map((e, i) => {
+    const qtd = propostas.filter((p) => (p.followup?.etapa ?? 0) === i).length;
+    const pct = total ? Math.round((qtd / total) * 100) : 0;
+    return `<div class="item fase-linha" title="${qtd} processo(s) na fase ${i + 1}">
+      <span class="fase-nome">${i + 1}. ${e.nome} ${e.tipo === "auto" ? "🤖" : "✋"}</span>
+      <div class="fu-progresso fase-barra"><div class="fu-barra" style="width:${pct}%"></div></div>
+      <span class="fase-qtd">${qtd}</span></div>`;
+  }).join("");
+
+  // ---- lista de processos com percentual ----
+  procs.innerHTML = total
+    ? propostas.map((p) => {
+        const et = p.followup?.etapa ?? 0;
+        const pct = Math.round(((et + 1) / etapas.length) * 100);
+        return `<div class="item fase-linha" title="Fase atual: ${(etapas[et] || {}).nome || "-"}">
+          <span class="fase-nome"><strong>${p.titulo}</strong><span class="detalhe">${(etapas[et] || {}).nome || ""}</span></span>
+          <div class="fu-progresso fase-barra"><div class="fu-barra" style="width:${pct}%"></div></div>
+          <span class="fase-qtd">${pct}%</span></div>`;
+      }).join("")
+    : "<p class='vazio'>Nenhum processo aberto ainda.</p>";
 }
 
 // ---------- abrir processo (ofício) ----------
@@ -258,8 +336,12 @@ function renderFollowup(p, etapas) {
   const fu = p.followup || { etapa: 2, documentos: {} };
   const pct = etapas.length ? Math.round(((fu.etapa + 1) / etapas.length) * 100) : 0;
   const opcoes = etapas
-    .map((e, i) => `<option value="${i}" ${i === fu.etapa ? "selected" : ""}>${i + 1}. ${e}</option>`)
+    .map((e, i) => `<option value="${i}" ${i === fu.etapa ? "selected" : ""}>${i + 1}. ${e.nome} ${e.tipo === "auto" ? "🤖" : "✋"}</option>`)
     .join("");
+  const tipoAtual = (etapas[fu.etapa] || {}).tipo || "manual";
+  const badge = tipoAtual === "auto"
+    ? `<span class="fu-badge auto" title="Fase coberta pela automação de documentos do sistema">🤖 Automatizada</span>`
+    : `<span class="fu-badge manual" title="Fase conduzida manualmente (fora do sistema)">✋ Manual</span>`;
 
   const oficio = (fu.documentos || {}).oficio;
   const docOficio = oficio
@@ -283,7 +365,7 @@ function renderFollowup(p, etapas) {
     `<div class="item item-col">
       <div class="fu-topo">
         <button type="button" class="fu-excluir" data-job="${p.job_id}" data-titulo="${p.titulo.replace(/"/g, "&quot;")}" title="Excluir este processo e seus arquivos">🗑</button>
-        <strong>${p.titulo}</strong>
+        <strong>${p.titulo}</strong> ${badge}
         <span class="detalhe">${p.cliente ? p.cliente + " — " : ""}${fmtData(p.data)}</span>
       </div>
       <div class="fu-progresso" title="Progresso: fase ${fu.etapa + 1} de ${etapas.length}"><div class="fu-barra" style="width:${pct}%"></div></div>

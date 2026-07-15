@@ -208,3 +208,35 @@ dd { margin: 0; }
   opacity: 0.45; transition: opacity 0.15s, background 0.15s;
 }
 .fu-excluir:hover { opacity: 1; background: #fee2e2; }
+
+/* ---------- badges de fase ---------- */
+.fu-badge {
+  font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 20px; margin-left: 8px;
+  vertical-align: middle; white-space: nowrap;
+}
+.fu-badge.auto { background: #dcfce7; color: #166534; }
+.fu-badge.manual { background: #fef3c7; color: #92400e; }
+
+/* ---------- dashboard ---------- */
+.dash-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-top: 16px;
+}
+.kpi {
+  background: #fff; border-radius: 12px; padding: 18px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.kpi-valor { font-size: 26px; font-weight: 800; color: #2563eb; }
+.kpi-valor small { font-size: 14px; color: #5a6b7b; font-weight: 600; }
+.kpi-nome { font-weight: 700; }
+.kpi-desc { font-size: 12px; color: #5a6b7b; }
+
+.notif { border-left: 4px solid #c2410c; }
+.notif.pronto { border-left-color: #16a34a; }
+
+.fase-linha { display: flex; align-items: center; gap: 14px; }
+.fase-nome { flex: 1; min-width: 180px; }
+.fase-nome .detalhe { margin-top: 2px; }
+.fase-barra { flex: 2; height: 10px; }
+.fase-qtd { font-weight: 700; min-width: 42px; text-align: right; }

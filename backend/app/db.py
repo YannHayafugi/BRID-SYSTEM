@@ -63,7 +63,18 @@ def salvar_oficio(registro: dict):
 
 
 def listar_oficios() -> list[dict]:
-    return _cli().table(TABELA_OFICIOS).select("*").order("data", desc=True).execute().data
+    """Só ofícios ainda não vinculados a um processo (disponíveis no drop)."""
+    return (_cli().table(TABELA_OFICIOS).select("*")
+            .is_("job_id", "null").order("data", desc=True).execute().data)
+
+
+def atualizar_oficio(oficio_id: str, campos: dict):
+    _cli().table(TABELA_OFICIOS).update(campos).eq("id", oficio_id).execute()
+
+
+def desvincular_oficios(job_id: str):
+    """Ao excluir um processo, seus ofícios voltam a aparecer no drop."""
+    _cli().table(TABELA_OFICIOS).update({"job_id": None}).eq("job_id", job_id).execute()
 
 
 def obter_oficio(oficio_id: str) -> dict | None:
