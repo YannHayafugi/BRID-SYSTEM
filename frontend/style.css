@@ -165,3 +165,17 @@ dd { margin: 0; }
   font-weight: 600; font-size: 14px; cursor: pointer;
 }
 .btn-doc.pendente { background: #fff7ed; color: #c2410c; border-color: #c2410c; }
+
+/* ---------- abrir processo ---------- */
+.form-projeto { gap: 10px; margin-bottom: 20px; }
+.form-projeto input[type="text"], .form-projeto input:not([type]) , .form-projeto input[placeholder] {
+  width: 100%; padding: 11px 12px; font-size: 14px;
+  border: 1px solid #b3c2d1; border-radius: 8px;
+}
+.form-projeto button {
+  align-self: flex-start; padding: 11px 22px;
+  font-size: 14px; font-weight: 600;
+  color: #fff; background: #2563eb;
+  border: none; border-radius: 8px; cursor: pointer;
+}
+.form-projeto button:disabled { background: #b3c2d1; }

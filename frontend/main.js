@@ -155,6 +155,7 @@ async function carregarListas() {
   for (const p of propostas) renderFollowup(p, etapas || []);
 
   for (const p of propostas) {
+    if (!p.tr_nome) continue; // processos abertos só por ofício não têm TR/gerados ainda
     enviados.insertAdjacentHTML(
       "beforeend",
       `<div class="item">
@@ -180,7 +181,37 @@ async function carregarListas() {
       </div>`
     );
   }
+
+  if (!enviados.innerHTML) enviados.innerHTML = "<p class='vazio'>Nenhum TR enviado ainda.</p>";
+  if (!gerados.innerHTML) gerados.innerHTML = "<p class='vazio'>Nenhum documento gerado ainda.</p>";
 }
+
+// ---------- abrir processo (ofício) ----------
+$("pj-oficio").addEventListener("change", () => {
+  $("pj-oficio-nome").textContent = $("pj-oficio").files.length ? `📎 ${$("pj-oficio").files[0].name}` : "";
+});
+
+$("form-projeto").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("btn-projeto").disabled = true;
+  const fd = new FormData();
+  fd.append("titulo", $("pj-titulo").value);
+  fd.append("cliente", $("pj-cliente").value);
+  fd.append("senha", senha);
+  if ($("pj-oficio").files.length) fd.append("arquivo", $("pj-oficio").files[0]);
+  try {
+    const r = await fetch("/api/projetos", { method: "POST", body: fd });
+    if (r.status === 401) return mostrarLogin();
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `Erro ${r.status}`);
+    $("form-projeto").reset();
+    $("pj-oficio-nome").textContent = "";
+    carregarListas();
+  } catch (err) {
+    alert(`❌ ${err.message}`);
+  } finally {
+    $("btn-projeto").disabled = false;
+  }
+});
 
 // ---------- follow-up ----------
 function renderFollowup(p, etapas) {

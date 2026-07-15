@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -39,9 +39,10 @@ DOCS = {"proposta": "Proposta.docx", "resumo": "Resumo.docx"}
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # Macrofases do fluxo de projetos públicos (Fluxograma Macro)
+# O processo abre com o Ofício; na sequência vêm TR e Proposta.
 ETAPAS_FLUXO = [
-    "Demanda aberta / análise do objeto",
-    "TR/ETP em elaboração e validação",
+    "Abertura do processo (Ofício)",
+    "TR/ETP recebido e validado",
     "Proposta em elaboração",
     "Proposta enviada / em ajustes",
     "Contrato assinado",
@@ -179,22 +180,55 @@ async def gerar(arquivo: UploadFile, senha: str = Form("")):
     }
 
 
+@app.post("/api/projetos")
+async def criar_projeto(titulo: str = Form(...), cliente: str = Form(""),
+                        senha: str = Form(""), arquivo: UploadFile | None = File(None)):
+    """Abre um processo no Follow-up a partir do Ofício, antes de existir TR/proposta."""
+    _exigir_senha(senha)
+    if not titulo.strip():
+        raise HTTPException(400, "Informe o título do processo.")
+
+    job_id = uuid.uuid4().hex[:12]
+    documentos = {}
+    if arquivo and arquivo.filename:
+        ext = Path(arquivo.filename).suffix.lower()
+        if ext not in (".pdf", ".docx", ".doc", ".txt", ".png", ".jpg", ".jpeg"):
+            raise HTTPException(400, "Formato do ofício não suportado.")
+        caminho = f"{job_id}/DOC_oficio{ext}"
+        db.upload_arquivo(caminho, await arquivo.read())
+        documentos["oficio"] = {"nome": arquivo.filename, "arquivo": caminho,
+                                "data": datetime.now().isoformat(timespec="seconds")}
+
+    db.salvar_proposta({
+        "job_id": job_id,
+        "titulo": titulo.strip(),
+        "cliente": cliente.strip(),
+        "data": datetime.now().isoformat(timespec="seconds"),
+        "tr_nome": None,
+        "etapa": 0,
+        "documentos": documentos,
+        "arquivos": {},
+    })
+    return {"ok": True, "job_id": job_id, "etapa": 0, "nome": ETAPAS_FLUXO[0]}
+
+
 @app.get("/api/propostas")
 def listar_propostas(x_senha: str | None = Header(default=None)):
     _exigir_senha(x_senha)
     itens = []
     for r in db.listar_propostas():
         job_id = r["job_id"]
+        arquivos = r.get("arquivos") or {}
         itens.append({
             "job_id": job_id,
             "titulo": r["titulo"],
             "cliente": r.get("cliente", ""),
             "data": r["data"],
-            "tr_nome": r.get("tr_nome", ""),
+            "tr_nome": r.get("tr_nome") or "",
             "followup": {"etapa": r.get("etapa", 2), "documentos": r.get("documentos") or {}},
-            "tr_url": f"/api/download-tr/{job_id}",
+            "tr_url": f"/api/download-tr/{job_id}" if arquivos.get("tr") else None,
             "downloads": {nome: f"/api/download/{job_id}/{nome}"
-                          for nome in DOCS if (r.get("arquivos") or {}).get(nome)},
+                          for nome in DOCS if arquivos.get(nome)},
         })
     return {"propostas": itens, "etapas": ETAPAS_FLUXO}
 
