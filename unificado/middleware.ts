@@ -36,9 +36,11 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Aplica a todas as rotas, exceto arquivos estáticos e de imagem do Next.js.
+     * Aplica a todas as rotas, exceto arquivos estáticos e de imagem do Next.js
+     * e arquivos estáticos servidos direto de /public (logo, ícones etc. —
+     * precisam carregar mesmo sem sessão, ex.: na própria tela de login).
      * As rotas de API cuidam da própria autenticação/RLS via Supabase.
      */
-    "/((?!_next/static|_next/image|favicon.ico|assets/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
