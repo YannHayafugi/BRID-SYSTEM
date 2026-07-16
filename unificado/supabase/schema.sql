@@ -1,0 +1,5 @@
+-- ATENÇÃO: NÃO aplicar este arquivo.
+-- O schema real deste sistema (projeto Supabase COMPARTILHADO, tabelas gp_*)
+-- está em ../../supabase/schema-unificado.sql — aplicado em 2026-07-16.
+-- O schema original do repo Securitização colidiria com o outro sistema
+-- que divide o mesmo projeto (tabela profiles + gatilho on_auth_user_created).

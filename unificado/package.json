@@ -1,0 +1,28 @@
+{
+  "name": "gerador-proposta-securitizacao",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "docx": "^9.0.2",
+    "@supabase/supabase-js": "^2.110.3",
+    "@supabase/ssr": "^0.12.1",
+    "@anthropic-ai/sdk": "^0.111.0",
+    "pdf-parse": "^2.4.5",
+    "@react-pdf/renderer": "^4.5.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0"
+  }
+}

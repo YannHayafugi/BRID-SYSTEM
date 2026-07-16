@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+.vercel
+*.log
+.DS_Store
+.env
+.env.local
+.env*.local
+
+# Arquivos de teste usados durante o desenvolvimento (não fazem parte do sistema)
+teste.pdf
+texto-extraido.txt

@@ -64,9 +64,9 @@ em `supabase/schema-unificado.sql`. A `gp_propostas` antiga permanece até o cut
 
 | # | Decisão | Opções | SOT |
 |---|---------|--------|-----|
-| D7 | Geração da proposta a partir do TR | (a) prompt JSON + templates (GRUPO-BRID) • (b) docxBuilder com timbrado FIA (Securitização) • (c) **híbrido: nossa IA gera o conteúdo, docxBuilder renderiza** | A definir — recomendado (c) |
-| D8 | Análise de TR no fluxo | (a) só geração (GRUPO-BRID) • (b) só auditoria com achados (Securitização) • (c) ambas como passos do processo: analisar → tratar achados → gerar | A definir — recomendado (c) |
-| D9 | Motor do ofício | reescrever o `oficio.py` em TS com a lib `docx` (mesmo layout) | Confirmar |
+| D7 | Geração da proposta a partir do TR | (a) prompt JSON + templates (GRUPO-BRID) • (b) docxBuilder com timbrado FIA (Securitização) • (c) **híbrido: nossa IA gera o conteúdo, docxBuilder renderiza** | ✅ **(c) híbrido** |
+| D8 | Análise de TR no fluxo | (a) só geração (GRUPO-BRID) • (b) só auditoria com achados (Securitização) • (c) ambas como passos do processo: analisar → tratar achados → gerar | ✅ **(c) auditoria → achados → geração** |
+| D9 | Motor do ofício | reescrever o `oficio.py` em TS com a lib `docx` (mesmo layout) | ✅ **confirmado** |
 
 **Entrega:** todas as rotas respondendo com paridade funcional; testes de cada endpoint.
 
