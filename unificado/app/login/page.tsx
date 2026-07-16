@@ -35,48 +35,39 @@ function LoginForm() {
   }
 
   return (
-    <main>
-      <header className="topo">
-        <h1>Gerador de Propostas – Securitização</h1>
-        <p>FIA – Fundação Instituto de Administração</p>
-      </header>
-
-      <div className="page" style={{ maxWidth: 420 }}>
-        <section className="card">
-          <h2>Entrar</h2>
-          <form onSubmit={entrar}>
-            <div className="field">
-              <label>E-mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoFocus
-                required
-              />
-            </div>
-            <div className="field" style={{ marginTop: 10 }}>
-              <label>Senha</label>
-              <input
-                type="password"
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                required
-              />
-            </div>
-            <div className="actions">
-              <button className="btn" type="submit" disabled={entrando}>
-                {entrando ? "Entrando..." : "Entrar"}
-              </button>
-              {erro && <span className="msg erro">{erro}</span>}
-            </div>
-          </form>
-          <p style={{ fontSize: 12, color: "#667085", marginTop: 16 }}>
-            Não tem uma conta? Peça a um administrador do sistema para criar seu acesso.
-          </p>
-        </section>
+    <div id="tela-login">
+      <div className="card-login">
+        <img src="/logo.svg" alt="Logo" className="logo" />
+        <h1>Gerador de Propostas</h1>
+        <p className="sub">Acesse com seu e-mail e senha</p>
+        <form onSubmit={entrar}>
+          <input
+            type="email"
+            placeholder="E-mail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            autoFocus
+            required
+          />
+          <input
+            type="password"
+            placeholder="Senha"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          <button type="submit" disabled={entrando}>
+            {entrando ? "Entrando..." : "Entrar"}
+          </button>
+          {erro && <p className="erro-texto">{erro}</p>}
+        </form>
+        <p style={{ fontSize: 12, color: "#667085", marginTop: 16 }}>
+          Não tem uma conta? Peça a um administrador do sistema para criar seu acesso.
+        </p>
       </div>
-    </main>
+    </div>
   );
 }
 
