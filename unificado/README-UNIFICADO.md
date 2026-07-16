@@ -41,9 +41,14 @@ npm run dev                     # http://localhost:3000
 - [x] Upload de TR no processo (`/api/processos/[id]/tr`) e downloads
       (`/api/processos/[id]/download/[tr|proposta|resumo|oficio]`)
 - [x] Catálogo de ofícios para o drop (`/api/oficios` — só os não vinculados)
-- [ ] Geração híbrida da proposta (D7): IA gera conteúdo JSON → docxBuilder renderiza
+- [x] Geração híbrida da proposta (D7): `POST /api/processos/[id]/gerar` —
+      IA gera o conteúdo (lib/proposta) e o DOCX sai com timbrado FIA
+      (Proposta + Resumo; PDF escaneado cai para leitura nativa pela IA;
+      TR em DOCX extraído via mammoth)
+- [x] Gancho D8: achados da análise vinculada (`cadastro_tr_id`) entram como
+      contexto do prompt da proposta
 - [ ] Gerador de ofícios em TS (D9) gravando no catálogo `gp_oficios`
-- [ ] Vincular análise de TR ao processo (D8: analisar → achados → gerar)
+- [ ] Tela para vincular análise de TR ao processo (parte FRONT do D8)
 
 ## Pendências da Etapa 3 (FRONT)
 
