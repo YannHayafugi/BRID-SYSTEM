@@ -60,6 +60,10 @@ npm run dev                     # http://localhost:3000
 - [x] Navegação (D11): Dashboard → Follow-up → Análise TR → Arquivos; Órgãos/Histórico/Admin no menu do usuário; home = Dashboard
 - [x] Página Follow-up completa: abrir processo (drop de ofícios + drop de órgãos com cadastro inline — D13), cards com fases auto/manual, enviar TR, botão Analisar TR (D12), gerar proposta, downloads, excluir
 - [x] Página Dashboard (KPIs, notificações, fases, progresso) e página Arquivos
-- [ ] Página /oficio (formulário do Gerador de Ofício — o botão do Follow-up já aponta para lá)
-- [ ] Vinculação automática análise ↔ processo na tela de Análise TR (query `?processo=ID`)
+- [x] Página /oficio (formulário completo com textos padrão; grava no catálogo)
+- [x] Vinculação análise ↔ processo: o card do Follow-up abre
+      `/tr-analise?orgao=X&processo=Y`; ao emitir o relatório, o cadastro é
+      vinculado ao processo (`cadastro_tr_id`) e alimenta a geração (D8)
 - [ ] Teste local `npm run dev` + ajustes finos de estilo
+
+**FRONT (Etapa 3) CONCLUÍDO** — próximo: Etapa 4 (deploy e cutover, ver plano).

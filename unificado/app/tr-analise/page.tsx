@@ -24,6 +24,9 @@ function AnaliseTRConteudo() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const orgaoId = searchParams.get("orgao");
+  // D12: análise aberta a partir de um card do Follow-up — o relatório gerado
+  // vincula o cadastro ao processo (cadastro_tr_id) e alimenta a geração (D8).
+  const processoId = searchParams.get("processo");
 
   const [carregandoOrgao, setCarregandoOrgao] = useState(true);
   const [erroOrgao, setErroOrgao] = useState<string | null>(null);
@@ -148,6 +151,7 @@ function AnaliseTRConteudo() {
         resultado,
         achados: achados.map((a) => ({ ...a, estado: estados[a.id] })),
         mensagensOk,
+        processoId: processoId || undefined,
       };
 
       const resp = await fetch("/api/tr/report", {

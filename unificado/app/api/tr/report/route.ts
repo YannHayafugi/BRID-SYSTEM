@@ -19,6 +19,10 @@ interface ReportRequestBody {
   resultado: ResultadoAnaliseTR;
   achados: (Achado & { estado: AchadoEstado })[];
   mensagensOk: string[];
+  /** D12: quando a análise foi aberta a partir de um card do Follow-up, o id
+   * do processo — o cadastro salvo é vinculado a ele (cadastro_tr_id) e os
+   * achados passam a alimentar a geração da proposta (D8). */
+  processoId?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -144,6 +148,15 @@ export async function POST(req: NextRequest) {
 
     if (erroCadastro || !cadastro) {
       throw new Error("Falha ao salvar o cadastro no histórico: " + (erroCadastro?.message || "erro desconhecido"));
+    }
+
+    // D12/D8: vincula a análise ao processo do Follow-up que a originou
+    if (body.processoId) {
+      const { error: erroVinculo } = await supabase
+        .from("gp_processos")
+        .update({ cadastro_tr_id: cadastro.id, updated_at: new Date().toISOString() })
+        .eq("id", body.processoId);
+      if (erroVinculo) console.warn("[aviso] análise não vinculada ao processo:", erroVinculo.message);
     }
 
     if (body.achados.length > 0) {

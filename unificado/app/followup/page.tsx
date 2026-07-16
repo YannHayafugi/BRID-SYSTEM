@@ -278,10 +278,16 @@ export default function FollowupPage() {
                       <input type="file" hidden accept=".pdf,.docx,.txt,.md"
                         onChange={(e) => e.target.files?.[0] && enviarTR(p.id, e.target.files[0])} />
                     </label>
-                    <Link className="btn-doc" href={`/tr-analise?processo=${p.id}`}
-                      title="Auditar o TR com IA — os achados ficam vinculados e alimentam a geração da proposta (D8)">
-                      🔍 Analisar TR{p.cadastro_tr_id ? " ✓" : ""}
-                    </Link>
+                    {p.orgao ? (
+                      <Link className="btn-doc" href={`/tr-analise?orgao=${p.orgao.id}&processo=${p.id}`}
+                        title="Auditar o TR com IA — os achados ficam vinculados e alimentam a geração da proposta (D8)">
+                        🔍 Analisar TR{p.cadastro_tr_id ? " ✓" : ""}
+                      </Link>
+                    ) : (
+                      <span className="btn-doc pendente" title="Defina o órgão (cliente) do processo para analisar o TR">
+                        🔍 Análise exige órgão
+                      </span>
+                    )}
                   </>
                 ) : (
                   <label className="btn-doc pendente" title="Enviar o Termo de Referência (PDF, DOCX ou TXT)">
