@@ -37,10 +37,12 @@ npm run dev                     # http://localhost:3000
 
 ## Pendências da Etapa 2 (BACK)
 
-- [ ] CRUD de processos do Follow-up (`/api/processos`) sobre `gp_processos`
-- [ ] Upload de TR no processo (`/api/processos/[id]/tr` + storage `gp-arquivos`)
+- [x] CRUD de processos do Follow-up (`/api/processos` GET/POST, DELETE, etapa manual)
+- [x] Upload de TR no processo (`/api/processos/[id]/tr`) e downloads
+      (`/api/processos/[id]/download/[tr|proposta|resumo|oficio]`)
+- [x] Catálogo de ofícios para o drop (`/api/oficios` — só os não vinculados)
 - [ ] Geração híbrida da proposta (D7): IA gera conteúdo JSON → docxBuilder renderiza
-- [ ] Gerador de ofícios em TS (D9) + catálogo `gp_oficios`
+- [ ] Gerador de ofícios em TS (D9) gravando no catálogo `gp_oficios`
 - [ ] Vincular análise de TR ao processo (D8: analisar → achados → gerar)
 
 ## Pendências da Etapa 3 (FRONT)
