@@ -56,6 +56,10 @@ npm run dev                     # http://localhost:3000
 
 ## Pendências da Etapa 3 (FRONT)
 
-- [ ] Páginas Follow-up e Dashboard (portar do app Vite)
-- [ ] Drop de ofícios no "Abrir processo" + órgão como Cliente (D6)
-- [ ] Decidir identidade visual (D10) e navegação (D11)
+- [x] Tema híbrido (D10): azul T21M via CSS vars — telas herdadas re-tematizadas junto
+- [x] Navegação (D11): Dashboard → Follow-up → Análise TR → Arquivos; Órgãos/Histórico/Admin no menu do usuário; home = Dashboard
+- [x] Página Follow-up completa: abrir processo (drop de ofícios + drop de órgãos com cadastro inline — D13), cards com fases auto/manual, enviar TR, botão Analisar TR (D12), gerar proposta, downloads, excluir
+- [x] Página Dashboard (KPIs, notificações, fases, progresso) e página Arquivos
+- [ ] Página /oficio (formulário do Gerador de Ofício — o botão do Follow-up já aponta para lá)
+- [ ] Vinculação automática análise ↔ processo na tela de Análise TR (query `?processo=ID`)
+- [ ] Teste local `npm run dev` + ajustes finos de estilo

@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import BarraUsuario from "./components/BarraUsuario";
 
 export const metadata: Metadata = {
-  title: "Gerador de Propostas – Securitização | FIA",
-  description: "Sistema interno para geração de propostas de securitização",
+  title: "Gerador de Propostas — GRUPO BRID",
+  description: "Follow-up, análise de TR e geração de propostas e ofícios",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

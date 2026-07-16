@@ -86,8 +86,10 @@ tela de análise de TR, formulário de proposta de securitização, histórico.
 
 | # | Decisão | Opções | SOT |
 |---|---------|--------|-----|
-| D10 | Identidade visual | (a) tema azul + logo T21M (GRUPO-BRID) • (b) padrão FIA (Securitização) • (c) híbrido | A definir |
-| D11 | Navegação | ordem das abas e o que fica na home (hoje: Dashboard → Follow-up → Arquivos) | Confirmar |
+| D10 | Identidade visual | (a) tema azul + logo T21M (GRUPO-BRID) • (b) padrão FIA (Securitização) • (c) híbrido | ✅ **(c) híbrido** — telas no tema azul/T21M; FIA só nos documentos gerados |
+| D11 | Navegação | ordem das abas e o que fica na home (hoje: Dashboard → Follow-up → Arquivos) | ✅ **Dashboard → Follow-up → Análise TR → Arquivos**; Órgãos e Admin no menu do usuário; geradores embutidos no Follow-up |
+| D12 | Análise de TR no processo | — | ✅ **botão "Analisar TR" no card** após envio do TR; achados vinculam ao processo e alimentam a geração (D8); aba própria segue para análises avulsas |
+| D13 | Cliente ao abrir processo | — | ✅ **drop de órgãos + atalho de cadastro** na própria tela |
 
 **Entrega:** app único navegável com todos os fluxos.
 

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-/** Barra fina no topo com o menu de navegação, o e-mail do usuário logado e
- * um botão de sair. Não aparece na tela de login. */
+/** Barra de navegação principal (D11): Dashboard → Follow-up → Análise TR →
+ * Arquivos como abas; Órgãos, Histórico e Administração no menu secundário.
+ * Não aparece na tela de login. */
 export default function BarraUsuario() {
   const pathname = usePathname();
   const router = useRouter();
@@ -47,7 +49,12 @@ export default function BarraUsuario() {
     router.refresh();
   }
 
-  const linkStyle = { color: "#1f4e3d", fontWeight: 600, textDecoration: "none" };
+  const abas = [
+    { href: "/dashboard", rotulo: "Dashboard" },
+    { href: "/followup", rotulo: "Follow-up" },
+    { href: "/tr-analise", rotulo: "Análise TR" },
+    { href: "/arquivos", rotulo: "Arquivos" },
+  ];
 
   return (
     <div
@@ -55,32 +62,70 @@ export default function BarraUsuario() {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        gap: 12,
-        padding: "6px 20px",
-        background: "#f5f6f7",
-        borderBottom: "1px solid #d8dee3",
-        fontSize: 12,
-        color: "#667085",
+        gap: 16,
+        padding: "8px 20px",
+        background: "#fff",
+        borderBottom: "1px solid var(--borda)",
+        fontSize: 13,
+        color: "var(--cinza)",
+        position: "sticky",
+        top: 0,
+        zIndex: 50,
       }}
     >
-      <nav style={{ display: "flex", gap: 16 }}>
-        <Link href="/orgaos" style={linkStyle}>Órgãos</Link>
-        <Link href="/historico" style={linkStyle}>Histórico</Link>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <Image src="/logo.svg" alt="Logo" width={34} height={34} style={{ borderRadius: 8 }} />
+        <nav style={{ display: "flex", gap: 4 }}>
+          {abas.map((a) => {
+            const ativa = pathname.startsWith(a.href);
+            return (
+              <Link
+                key={a.href}
+                href={a.href}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  textDecoration: "none",
+                  color: ativa ? "var(--primaria)" : "var(--cinza)",
+                  background: ativa ? "var(--primaria-claro)" : "transparent",
+                }}
+              >
+                {a.rotulo}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <Link href="/orgaos" style={{ color: "var(--primaria)", fontWeight: 600, textDecoration: "none" }}>
+          Órgãos
+        </Link>
+        <Link href="/historico" style={{ color: "var(--primaria)", fontWeight: 600, textDecoration: "none" }}>
+          Histórico
+        </Link>
         {ehAdmin && (
-          <Link href="/admin/usuarios" style={linkStyle}>Administração</Link>
+          <Link
+            href="/admin/usuarios"
+            style={{ color: "var(--primaria)", fontWeight: 600, textDecoration: "none" }}
+          >
+            Administração
+          </Link>
         )}
-      </nav>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <span>{email}</span>
         <button
           onClick={sair}
+          title="Sair do sistema"
           style={{
             background: "none",
-            border: "none",
-            color: "#1f4e3d",
+            border: "1px solid var(--borda)",
+            borderRadius: 8,
+            padding: "6px 12px",
+            color: "var(--cinza)",
             fontWeight: 600,
             cursor: "pointer",
-            fontSize: 12,
+            fontSize: 13,
           }}
         >
           Sair
