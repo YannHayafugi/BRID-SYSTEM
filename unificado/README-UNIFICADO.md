@@ -47,8 +47,12 @@ npm run dev                     # http://localhost:3000
       TR em DOCX extraído via mammoth)
 - [x] Gancho D8: achados da análise vinculada (`cadastro_tr_id`) entram como
       contexto do prompt da proposta
-- [ ] Gerador de ofícios em TS (D9) gravando no catálogo `gp_oficios`
-- [ ] Tela para vincular análise de TR ao processo (parte FRONT do D8)
+- [x] Gerador de ofícios em TS (D9): `POST /api/oficio` — layout FIA fiel ao
+      oficio.py (Garamond 11, listas romanas/alfabéticas), grava no catálogo
+      `gp_oficios` + storage e devolve o .docx
+- [ ] Tela para vincular análise de TR ao processo (parte FRONT do D8 — Etapa 3)
+
+**BACK (Etapa 2) CONCLUÍDO** — próximo: Etapa 3 (FRONT).
 
 ## Pendências da Etapa 3 (FRONT)
 
