@@ -162,20 +162,23 @@
         </section>
 
         <!-- ABA DASHBOARD -->
-        <section id="aba-dashboard">
-          <h2>Dashboard</h2>
-          <p class="sub">Visão geral dos processos: indicadores, fases e pendências de automação.</p>
-
+        <section id="aba-dashboard" class="dash-tela">
           <div id="dash-kpis" class="dash-kpis"></div>
 
-          <h3 class="sub-secao">🔔 Notificações de automação</h3>
-          <div id="dash-notificacoes" class="lista"></div>
-
-          <h3 class="sub-secao">📊 Processos por fase</h3>
-          <div id="dash-fases" class="lista"></div>
-
-          <h3 class="sub-secao">📋 Processos e progresso</h3>
-          <div id="dash-processos" class="lista"></div>
+          <div class="dash-colunas">
+            <div class="dash-col">
+              <h3 class="sub-secao">🔔 Notificações de automação</h3>
+              <div id="dash-notificacoes" class="lista dash-scroll"></div>
+            </div>
+            <div class="dash-col">
+              <h3 class="sub-secao">📊 Processos por fase</h3>
+              <div id="dash-fases" class="lista dash-scroll"></div>
+            </div>
+            <div class="dash-col">
+              <h3 class="sub-secao">📋 Processos e progresso</h3>
+              <div id="dash-processos" class="lista dash-scroll"></div>
+            </div>
+          </div>
         </section>
 
         <!-- ABA ARQUIVOS -->
