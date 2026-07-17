@@ -5,8 +5,9 @@
  * texto padrão; o .docx baixa na hora e o ofício entra no catálogo (drop do
  * "Abrir novo processo" no Follow-up).
  */
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 const LOGRADOUROS = ["Rua","Avenida","Praça","Alameda","Travessa","Estrada","Rodovia","Largo","Viela","Via","Quadra","Setor"];
@@ -73,6 +74,18 @@ const lbl: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 6
 const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid var(--borda)", borderRadius: 8, marginTop: 4, fontFamily: "inherit" };
 
 export default function OficioPage() {
+  return (
+    <Suspense>
+      <OficioConteudo />
+    </Suspense>
+  );
+}
+
+function OficioConteudo() {
+  const searchParams = useSearchParams();
+  // D14: quando aberto a partir de um processo do Follow-up (já com Proposta
+  // aprovada), o ofício gerado é vinculado automaticamente a esse processo.
+  const processoId = searchParams.get("processo");
   const [f, setF] = useState({ ...PADRAO, data: dataPorExtenso() });
   const [gerando, setGerando] = useState(false);
   const [msg, setMsg] = useState("");
@@ -124,6 +137,7 @@ export default function OficioPage() {
       cidade_emissao: f.cidade,
       data_extenso: f.data,
       assinatura: f.assinatura,
+      processoId: processoId || undefined,
     };
     try {
       const r = await fetch("/api/oficio", {
@@ -139,7 +153,11 @@ export default function OficioPage() {
       a.download = `Oficio - Contrato ${f.contrato.replace(/\//g, "-")}.docx`;
       a.click();
       URL.revokeObjectURL(url);
-      setMsg("✅ Ofício gerado — download iniciado. Ele já está no drop do Follow-up.");
+      setMsg(
+        processoId
+          ? "✅ Ofício gerado e vinculado ao processo — download iniciado."
+          : "✅ Ofício gerado — download iniciado. Ele já está no drop do Follow-up."
+      );
     } catch (err) {
       setMsg(`❌ ${err instanceof Error ? err.message : err}`);
     } finally {

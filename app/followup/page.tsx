@@ -14,10 +14,8 @@ interface Orgao { id: string; razao_social: string; tipo_ente?: string; cidade?:
 interface Processo {
   id: string; titulo: string; orgao: Orgao | null; data: string; tr_nome: string;
   etapa: number; documentos: { oficio?: { nome: string } }; arquivos: string[];
-  cadastro_tr_id: string | null;
+  cadastro_tr_id: string | null; proposta_aprovada: boolean;
 }
-interface Oficio { id: string; assunto: string; destinatario: string; data: string }
-
 function fmtData(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -26,17 +24,15 @@ function fmtData(iso: string) {
 export default function FollowupPage() {
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
-  const [oficios, setOficios] = useState<Oficio[]>([]);
   const [orgaos, setOrgaos] = useState<Orgao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [gerando, setGerando] = useState<string | null>(null);
+  const [aprovando, setAprovando] = useState<string | null>(null);
 
   // formulário "abrir novo processo"
   const [titulo, setTitulo] = useState("");
   const [orgaoId, setOrgaoId] = useState("");
-  const [oficioId, setOficioId] = useState("");
-  const [arquivoOficio, setArquivoOficio] = useState<File | null>(null);
   const [abrindo, setAbrindo] = useState(false);
   // atalho de cadastro de órgão (D13)
   const [novoOrgao, setNovoOrgao] = useState(false);
@@ -48,16 +44,14 @@ export default function FollowupPage() {
   const carregar = useCallback(async () => {
     setErro("");
     try {
-      const [rp, ro, rg] = await Promise.all([
+      const [rp, rg] = await Promise.all([
         fetch("/api/processos"),
-        fetch("/api/oficios"),
         fetch("/api/orgaos"),
       ]);
       if (rp.status === 401) { window.location.href = "/login"; return; }
       const dp = await rp.json();
       setProcessos(dp.processos || []);
       setEtapas(dp.etapas || []);
-      setOficios((await ro.json()).oficios || []);
       setOrgaos((await rg.json()).orgaos || []);
     } catch {
       setErro("Falha ao carregar os processos.");
@@ -67,15 +61,6 @@ export default function FollowupPage() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
-
-  function selecionarOficio(id: string) {
-    setOficioId(id);
-    const o = oficios.find((x) => x.id === id);
-    if (o) {
-      setTitulo(o.assunto || "");
-      setArquivoOficio(null);
-    }
-  }
 
   async function cadastrarOrgao() {
     if (!noRazao.trim() || !noCidade.trim()) { alert("Preencha razão social e cidade."); return; }
@@ -99,17 +84,28 @@ export default function FollowupPage() {
       const fd = new FormData();
       fd.append("titulo", titulo);
       fd.append("orgao_id", orgaoId);
-      fd.append("oficio_id", oficioId);
-      if (!oficioId && arquivoOficio) fd.append("arquivo", arquivoOficio);
       const r = await fetch("/api/processos", { method: "POST", body: fd });
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro || "Falha ao abrir o processo.");
-      setTitulo(""); setOrgaoId(""); setOficioId(""); setArquivoOficio(null);
+      setTitulo(""); setOrgaoId("");
       await carregar();
     } catch (err) {
       alert(`❌ ${err instanceof Error ? err.message : err}`);
     } finally {
       setAbrindo(false);
+    }
+  }
+
+  async function aprovarProposta(id: string) {
+    setAprovando(id);
+    try {
+      const r = await fetch(`/api/processos/${id}/aprovar`, { method: "POST" });
+      if (!r.ok) throw new Error((await r.json()).erro || "Falha ao aprovar a proposta.");
+      await carregar();
+    } catch (err) {
+      alert(`❌ ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setAprovando(null);
     }
   }
 
@@ -156,7 +152,7 @@ export default function FollowupPage() {
     <div className="page-larga">
       <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Follow-up</h1>
       <p className="detalhe" style={{ marginBottom: 20 }}>
-        O processo abre com o Ofício; TR e Proposta entram nas fases seguintes.
+        Fluxo de documentos: TR → Proposta → Ofício. O Ofício só é liberado depois que a Proposta é aprovada.
       </p>
 
       {/* Abrir novo processo */}
@@ -188,36 +184,13 @@ export default function FollowupPage() {
           </div>
         )}
 
-        <select value={oficioId} onChange={(e) => selecionarOficio(e.target.value)}
-          title="Escolher um ofício já gerado — o título se preenche sozinho">
-          <option value="">— Selecionar ofício gerado (preenche o título, opcional) —</option>
-          {oficios.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.assunto || "Sem assunto"} — {o.destinatario} ({fmtData(o.data)})
-            </option>
-          ))}
-        </select>
-
         <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required
           placeholder="Título do processo *" title="Nome do processo no Follow-up" />
 
-        <div className="downloads">
-          <label className="btn-doc" title="Anexar um ofício que não foi gerado pelo sistema">
-            ＋ Anexar ofício externo (opcional)
-            <input type="file" hidden accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg"
-              onChange={(e) => { setArquivoOficio(e.target.files?.[0] || null); setOficioId(""); }} />
-          </label>
-          {arquivoOficio && <span className="detalhe">📎 {arquivoOficio.name}</span>}
-        </div>
-
         <button type="submit" className="btn-azul" disabled={abrindo}
-          title="Criar o processo na fase 'Abertura do processo (Ofício)'">
+          title="Criar o processo — o próximo passo é enviar o TR">
           {abrindo ? "Abrindo..." : "Abrir processo"}
         </button>
-
-        <div className="downloads" style={{ borderTop: "1px solid var(--borda)", paddingTop: 12, width: "100%" }}>
-          <Link href="/oficio" className="btn-doc" title="Abrir o Gerador de Ofício">📝 Gerar Ofício →</Link>
-        </div>
       </form>
 
       {/* Cards dos processos */}
@@ -260,15 +233,8 @@ export default function FollowupPage() {
             </select>
 
             <div style={{ width: "100%" }}>
-              <span className="detalhe">Documentos essenciais:</span>
+              <span className="detalhe">Documentos essenciais (TR → Proposta → Ofício):</span>
               <div className="downloads">
-                {temOficio ? (
-                  <a className="btn-dl btn-sec" href={`/api/processos/${p.id}/download/oficio`}
-                    title="Baixar o ofício deste processo">📎 Ofício</a>
-                ) : (
-                  <span className="btn-doc pendente" title="Abra o processo pelo drop de ofícios ou anexe um externo">Ofício pendente</span>
-                )}
-
                 {temTR ? (
                   <>
                     <a className="btn-dl btn-sec" href={`/api/processos/${p.id}/download/tr`}
@@ -303,6 +269,13 @@ export default function FollowupPage() {
                       title="Baixar a proposta gerada (.docx)">📎 Proposta</a>
                     <a className="btn-dl btn-sec" href={`/api/processos/${p.id}/download/resumo`}
                       title="Baixar o resumo executivo (.docx)">📎 Resumo</a>
+                    {!p.proposta_aprovada && (
+                      <button type="button" className="btn-doc" disabled={aprovando === p.id}
+                        onClick={() => aprovarProposta(p.id)}
+                        title="Aprovar a Proposta — libera a emissão do Ofício">
+                        {aprovando === p.id ? "Aprovando..." : "✅ Aprovar Proposta"}
+                      </button>
+                    )}
                   </>
                 ) : temTR ? (
                   <button type="button" className="btn-doc" disabled={gerando === p.id}
@@ -312,6 +285,20 @@ export default function FollowupPage() {
                   </button>
                 ) : (
                   <span className="btn-doc pendente" title="Envie o TR primeiro">Proposta (envie o TR primeiro)</span>
+                )}
+
+                {temOficio ? (
+                  <a className="btn-dl btn-sec" href={`/api/processos/${p.id}/download/oficio`}
+                    title="Baixar o ofício deste processo">📎 Ofício</a>
+                ) : p.proposta_aprovada ? (
+                  <Link className="btn-doc" href={`/oficio?processo=${p.id}`}
+                    title="Emitir o Ofício — a Proposta já foi aprovada">
+                    📝 Gerar Ofício
+                  </Link>
+                ) : (
+                  <span className="btn-doc pendente" title="Aprove a Proposta para liberar o Ofício">
+                    Ofício liberado após aprovação da Proposta
+                  </span>
                 )}
               </div>
             </div>
