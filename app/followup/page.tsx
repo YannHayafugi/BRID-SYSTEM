@@ -204,6 +204,9 @@ export default function FollowupPage() {
         const temTR = p.arquivos.includes("tr");
         const temProposta = p.arquivos.includes("proposta");
         const temOficio = !!p.documentos?.oficio;
+        // D19: só libera selecionar fases manuais depois que a fase
+        // automatizada (TR > Proposta > Ofício) estiver concluída.
+        const primeiraManual = etapas.findIndex((e2) => e2.tipo === "manual");
         return (
           <div className="item item-col" key={p.id}>
             <div className="fu-topo">
@@ -224,12 +227,19 @@ export default function FollowupPage() {
             </div>
 
             <select className="fu-etapa" value={p.etapa} onChange={(e) => mudarEtapa(p.id, Number(e.target.value))}
-              title="Fases 🤖 avançam sozinhas conforme os documentos; selecione apenas as fases manuais ✋">
-              {etapas.map((e2, i) => (
-                <option key={i} value={i} disabled={e2.tipo === "auto"}>
-                  {i + 1}. {e2.nome} {e2.tipo === "auto" ? "🤖 (automática)" : "✋"}
-                </option>
-              ))}
+              title={
+                primeiraManual >= 0 && p.etapa < primeiraManual
+                  ? "As fases manuais só se liberam depois que a fase automatizada (TR > Proposta > Ofício) for concluída."
+                  : "Fases 🤖 avançam sozinhas conforme os documentos; selecione apenas as fases manuais ✋"
+              }>
+              {etapas.map((e2, i) => {
+                const bloqueadaPorAutomacaoPendente = e2.tipo === "manual" && primeiraManual >= 0 && p.etapa < primeiraManual;
+                return (
+                  <option key={i} value={i} disabled={e2.tipo === "auto" || bloqueadaPorAutomacaoPendente}>
+                    {i + 1}. {e2.nome} {e2.tipo === "auto" ? "🤖 (automática)" : bloqueadaPorAutomacaoPendente ? "🔒 (conclua a automação)" : "✋"}
+                  </option>
+                );
+              })}
             </select>
 
             <div style={{ width: "100%" }}>

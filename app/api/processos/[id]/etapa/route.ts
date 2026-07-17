@@ -24,6 +24,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const supabase = getSupabaseRouteClient();
+
+  // D19: fases manuais só se liberam depois que a fase automatizada
+  // (TR > Proposta > Ofício) estiver concluída.
+  const primeiraManual = ETAPAS_FLUXO.findIndex((e) => e.tipo === "manual");
+  const { data: processoAtual, error: erroBusca } = await supabase
+    .from("gp_processos")
+    .select("etapa")
+    .eq("id", params.id)
+    .single();
+  if (erroBusca || !processoAtual) {
+    return NextResponse.json({ erro: "Processo não encontrado." }, { status: 404 });
+  }
+  if (primeiraManual >= 0 && processoAtual.etapa < primeiraManual) {
+    return NextResponse.json(
+      { erro: "Conclua a fase automatizada (TR > Proposta > Ofício) antes de avançar para fases manuais." },
+      { status: 400 }
+    );
+  }
+
   const { data, error } = await supabase
     .from("gp_processos")
     .update({ etapa, updated_at: new Date().toISOString() })
