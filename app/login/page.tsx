@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import ThemeToggle from "@/app/components/ThemeToggle";
 
 function LoginForm() {
   const router = useRouter();
@@ -40,6 +41,9 @@ function LoginForm() {
 
   return (
     <div id="tela-login">
+      <div style={{ position: "fixed", top: 16, right: 16 }}>
+        <ThemeToggle variante="auto" />
+      </div>
       <div className="card-login">
         <img src="/logo.svg" alt="Logo" className="logo" />
         <h1>Gerador de Propostas</h1>

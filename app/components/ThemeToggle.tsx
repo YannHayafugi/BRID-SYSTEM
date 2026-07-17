@@ -5,7 +5,14 @@
  * layout para evitar flash do tema errado ao carregar a página). */
 import { useEffect, useState } from "react";
 
-export default function ThemeToggle() {
+export default function ThemeToggle({
+  variante = "header",
+}: {
+  /** "header": estilo claro-sobre-escuro fixo, para a barra superior (que
+   * tem fundo escuro fixo nos dois temas). "auto": usa as variáveis de tema,
+   * para telas fora da barra (ex.: login) onde o fundo muda com o tema. */
+  variante?: "header" | "auto";
+}) {
   const [escuro, setEscuro] = useState(false);
 
   useEffect(() => {
@@ -19,6 +26,9 @@ export default function ThemeToggle() {
     setEscuro(!escuro);
   }
 
+  const estiloHeader = { border: "1px solid #3a3529", color: "#c9c4b6" };
+  const estiloAuto = { border: "1px solid var(--borda)", color: "var(--texto)", background: "var(--bg-suave)" };
+
   return (
     <button
       type="button"
@@ -26,7 +36,6 @@ export default function ThemeToggle() {
       title={escuro ? "Mudar para tema claro" : "Mudar para tema escuro"}
       style={{
         background: "none",
-        border: "1px solid #3a3529",
         borderRadius: 8,
         width: 32,
         height: 32,
@@ -35,7 +44,7 @@ export default function ThemeToggle() {
         justifyContent: "center",
         cursor: "pointer",
         fontSize: 15,
-        color: "#c9c4b6",
+        ...(variante === "auto" ? estiloAuto : estiloHeader),
       }}
     >
       {escuro ? "☀️" : "🌙"}
