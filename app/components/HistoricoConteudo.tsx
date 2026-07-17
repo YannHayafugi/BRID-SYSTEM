@@ -18,11 +18,27 @@ interface CadastroResumo {
   created_at: string;
 }
 
+interface Etapa { nome: string; tipo: "auto" | "manual" }
+interface ProcessoResumo {
+  id: string;
+  titulo: string;
+  orgao: { id: string; razao_social: string } | null;
+  data: string;
+  etapa: number;
+  criado_por: { id: string; nome: string } | null;
+}
+
 export default function HistoricoConteudo() {
   const router = useRouter();
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [cadastros, setCadastros] = useState<CadastroResumo[]>([]);
+
+  // D29: processos abertos por este usuário (RLS: não-admin só vê os
+  // próprios; admin vê de todos — e só o admin recebe "criado_por").
+  const [processos, setProcessos] = useState<ProcessoResumo[]>([]);
+  const [etapas, setEtapas] = useState<Etapa[]>([]);
+  const [souAdmin, setSouAdmin] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -42,6 +58,14 @@ export default function HistoricoConteudo() {
 
         if (error) throw new Error(error.message);
         setCadastros(data || []);
+
+        const rp = await fetch("/api/processos");
+        if (rp.ok) {
+          const dp = await rp.json();
+          setProcessos(dp.processos || []);
+          setEtapas(dp.etapas || []);
+          setSouAdmin(!!dp.souAdmin);
+        }
       } catch (err: any) {
         setErro(err.message || "Erro ao carregar histórico.");
       } finally {
@@ -55,6 +79,34 @@ export default function HistoricoConteudo() {
       {carregando && <p>Carregando...</p>}
       {erro && <p className="msg erro">{erro}</p>}
 
+      <h3 style={{ fontSize: 15, margin: "0 0 10px" }}>
+        📋 {souAdmin ? "Processos abertos (todos os usuários)" : "Meus processos abertos"} ({processos.length})
+      </h3>
+      {!carregando && processos.length === 0 && <p className="vazio" style={{ marginBottom: 20 }}>Nenhum processo aberto ainda.</p>}
+      {processos.map((p) => {
+        const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
+        return (
+          <Link key={p.id} href={`/followup?processo=${p.id}`} className="item"
+            style={{ display: "block", textDecoration: "none", color: "inherit", marginBottom: 10 }}
+            title="Abrir este processo no Follow-up">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <strong style={{ fontSize: 13 }}>{p.titulo}</strong>
+              <span className="detalhe">{pct}%</span>
+            </div>
+            <div className="fu-progresso" style={{ margin: "6px 0" }}>
+              <div className="fu-barra" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="detalhe">
+              {p.orgao ? `${p.orgao.razao_social} — ` : ""}{etapas[p.etapa]?.nome || ""}
+              {p.criado_por ? ` — criado por ${p.criado_por.nome}` : ""}
+            </span>
+          </Link>
+        );
+      })}
+
+      <h3 style={{ fontSize: 15, margin: "24px 0 10px", borderTop: "1px solid var(--borda)", paddingTop: 16 }}>
+        🔍 Análises de TR ({cadastros.length})
+      </h3>
       {!carregando && cadastros.length === 0 && !erro && <p>Nenhuma análise salva ainda.</p>}
 
       {cadastros.map((c) => (

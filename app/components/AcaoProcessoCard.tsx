@@ -19,6 +19,7 @@ export interface AcaoProcesso {
   cadastro_tr_id: string | null;
   proposta_aprovada: boolean;
   historico_etapas: HistoricoEtapaTL[];
+  criado_por: { id: string | null; nome: string } | null;
 }
 
 function hoje() { return new Date().toISOString().slice(0, 10); }
@@ -125,6 +126,9 @@ export default function AcaoProcessoCard({
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <strong style={{ fontSize: 13 }}>{aberto ? "▾" : "▸"} {p.titulo}</strong>
+          {p.criado_por && (
+            <span className="detalhe">criado por {p.criado_por.nome}</span>
+          )}
           <div className="fu-progresso" style={{ margin: "6px 0" }}>
             <div className="fu-barra" style={{ width: `${pct}%` }} />
           </div>

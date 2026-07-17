@@ -11,14 +11,22 @@ export async function GET() {
     return NextResponse.json({ erro: "Sessão expirada. Faça login novamente." }, { status: 401 });
   }
 
+  // D29: "criado por" só é exposto para administradores — só neste caso o
+  // select embute o criador (RLS já garante que não-admin só vê os próprios
+  // processos, então mostrar quem criou seria redundante para eles).
+  const ehAdmin = profile.perfil === "admin";
+  const campos = ehAdmin
+    ? "*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf), criador:gp_profiles!gp_processos_criado_por_fkey(id, nome_completo, email)"
+    : "*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf)";
+
   const supabase = getSupabaseRouteClient();
   const { data, error } = await supabase
     .from("gp_processos")
-    .select("*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf)")
+    .select(campos)
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
-  const processos = (data || []).map((p) => ({
+  const processos = (data || []).map((p: any) => ({
     id: p.id,
     titulo: p.titulo,
     orgao: p.orgao,
@@ -31,9 +39,12 @@ export async function GET() {
     cadastro_tr_id: p.cadastro_tr_id,
     proposta_aprovada: !!p.proposta_aprovada,
     historico_etapas: p.historico_etapas || [],
+    criado_por: ehAdmin
+      ? { id: p.criador?.id ?? p.criado_por, nome: p.criador?.nome_completo || p.criador?.email || "—" }
+      : null,
   }));
 
-  return NextResponse.json({ ok: true, processos, etapas: ETAPAS_FLUXO });
+  return NextResponse.json({ ok: true, processos, etapas: ETAPAS_FLUXO, souAdmin: ehAdmin });
 }
 
 /** Abre um processo no Follow-up. Fluxo de documentos é TR > Proposta > Ofício

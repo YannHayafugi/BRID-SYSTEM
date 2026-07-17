@@ -31,17 +31,23 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ erro: erroContatos.message }, { status: 500 });
   }
 
-  // Processos (Ações) deste órgão — usados na timeline de fases da página de detalhe.
+  // Processos (Ações) deste órgão — usados na timeline de fases da página de
+  // detalhe. D29: "criado por" só é embutido para administradores.
+  const ehAdmin = profile.perfil === "admin";
+  const campos = ehAdmin
+    ? "id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at, criador:gp_profiles!gp_processos_criado_por_fkey(id, nome_completo, email)"
+    : "id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at";
+
   const { data: processos, error: erroProcessos } = await supabase
     .from("gp_processos")
-    .select("id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at")
+    .select(campos)
     .eq("orgao_id", params.id)
     .order("created_at", { ascending: false });
   if (erroProcessos) {
     return NextResponse.json({ erro: erroProcessos.message }, { status: 500 });
   }
 
-  const processosMapeados = (processos || []).map((p) => ({
+  const processosMapeados = (processos || []).map((p: any) => ({
     id: p.id,
     titulo: p.titulo,
     data: p.created_at,
@@ -51,6 +57,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     cadastro_tr_id: p.cadastro_tr_id,
     proposta_aprovada: !!p.proposta_aprovada,
     historico_etapas: p.historico_etapas || [],
+    criado_por: ehAdmin
+      ? { id: p.criador?.id ?? null, nome: p.criador?.nome_completo || p.criador?.email || "—" }
+      : null,
   }));
 
   return NextResponse.json({

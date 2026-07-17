@@ -17,6 +17,7 @@ interface Processo {
   id: string; titulo: string; orgao: Orgao | null; data: string; tr_nome: string;
   etapa: number; documentos: { oficio?: { nome: string } }; arquivos: string[];
   cadastro_tr_id: string | null; proposta_aprovada: boolean; historico_etapas: HistoricoEtapa[];
+  criado_por: { id: string; nome: string } | null;
 }
 function hoje() { return new Date().toISOString().slice(0, 10); }
 function fmtDataCurta(iso: string) {
@@ -256,6 +257,7 @@ function FollowupConteudo() {
               </span>
               <span className="detalhe">
                 {p.orgao ? `${p.orgao.razao_social} — ` : ""}{fmtData(p.data)}
+                {p.criado_por ? ` — criado por ${p.criado_por.nome}` : ""}
               </span>
             </div>
 
