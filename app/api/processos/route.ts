@@ -23,6 +23,7 @@ export async function GET() {
     titulo: p.titulo,
     orgao: p.orgao,
     data: p.created_at,
+    atualizado_em: p.updated_at,
     tr_nome: p.tr_nome || "",
     etapa: p.etapa,
     documentos: p.documentos || {},

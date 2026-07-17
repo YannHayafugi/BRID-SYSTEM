@@ -11,10 +11,16 @@ interface Orgao { id: string; razao_social: string }
 interface Processo {
   id: string; titulo: string; etapa: number; tr_nome: string;
   arquivos: string[]; documentos: { oficio?: unknown };
-  orgao: Orgao | null; data: string;
+  orgao: Orgao | null; data: string; atualizado_em: string;
 }
 
 const FILTROS_VAZIOS = { orgaoId: "", de: "", ate: "", etapa: "" };
+
+function fmtData(iso: string) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function DashboardPage() {
   const [processos, setProcessos] = useState<Processo[]>([]);
@@ -72,11 +78,18 @@ export default function DashboardPage() {
   const concluidos = processosFiltrados.filter((p) => p.etapa >= etapas.length - 1).length;
   const eficacia = total ? Math.round((emContrato / total) * 100) : 0;
 
-  const avisos = processosFiltrados.flatMap((p) => {
+  const primeiraManual = etapas.findIndex((e) => e.tipo === "manual");
+
+  const avisosAutomacao = processosFiltrados.flatMap((p) => {
     if (!temOficio(p)) return [{ p, msg: "sem Ofício de abertura — gere ou anexe pelo Follow-up", pronto: false }];
     if (!temTR(p)) return [{ p, msg: "aguardando envio do TR", pronto: false }];
     if (!temProposta(p)) return [{ p, msg: "TR enviado — pronto para gerar a Proposta 🤖", pronto: true }];
     return [];
+  });
+
+  const avisosManual = processosFiltrados.flatMap((p) => {
+    if (primeiraManual < 0 || p.etapa < primeiraManual) return [];
+    return [{ p, msg: `Fase atual: ${etapas[p.etapa]?.nome || "-"}`, pronto: false }];
   });
 
   if (carregando) return <div className="page-larga"><p className="vazio">Carregando...</p></div>;
@@ -143,15 +156,33 @@ export default function DashboardPage() {
 
       <div className="dash-colunas">
         <div className="dash-col">
-          <h3>🔔 Notificações de automação</h3>
+          <h3>🔔 Notificações</h3>
           <div className="dash-scroll">
-            {avisos.length ? avisos.map((a, i) => (
+            <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "4px 0" }}>🤖 Automação</span>
+            {avisosAutomacao.length ? avisosAutomacao.map((a, i) => (
               <Link href={`/followup?processo=${a.p.id}`} className={`item notif ${a.pronto ? "pronto" : ""}`} key={i}
                 style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
                 title="Abrir este processo no Follow-up">
-                <div><strong>{a.p.titulo}</strong><span className="detalhe">{a.msg}</span></div>
+                <div>
+                  <strong>{a.p.titulo}</strong>
+                  <span className="detalhe">{a.msg}</span>
+                  <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
+                </div>
               </Link>
             )) : <p className="vazio">✅ Nenhuma pendência de automação.</p>}
+
+            <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "12px 0 4px" }}>✋ Manual</span>
+            {avisosManual.length ? avisosManual.map((a, i) => (
+              <Link href={`/followup?processo=${a.p.id}`} className="item notif" key={i}
+                style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
+                title="Abrir este processo no Follow-up">
+                <div>
+                  <strong>{a.p.titulo}</strong>
+                  <span className="detalhe">{a.msg}</span>
+                  <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
+                </div>
+              </Link>
+            )) : <p className="vazio">✅ Nenhum processo em fase manual.</p>}
           </div>
         </div>
 
