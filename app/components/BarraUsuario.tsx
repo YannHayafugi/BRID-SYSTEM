@@ -11,8 +11,10 @@ import OrgaosConteudo from "./OrgaosConteudo";
 import HistoricoConteudo from "./HistoricoConteudo";
 import PerfilConteudo from "./PerfilConteudo";
 import AdminUsuariosConteudo from "./AdminUsuariosConteudo";
+import { corPerfil, NOMES_PERFIL, textoAvatarPerfil } from "@/lib/perfil";
 
 type ModalId = "orgaos" | "historico" | "perfil" | "admin" | null;
+type TipoPerfil = "admin" | "editor" | "visualizador" | null;
 
 /** Barra de navegação principal (D18): Dashboard → Follow-up → Arquivos como
  * abas (Análise TR saiu da navegação fixa — acessada pelo card do Follow-up).
@@ -23,6 +25,7 @@ export default function BarraUsuario() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
+  const [tipoPerfil, setTipoPerfil] = useState<TipoPerfil>(null);
   const [ehAdmin, setEhAdmin] = useState(false);
   const [modalAberto, setModalAberto] = useState<ModalId>(null);
 
@@ -40,9 +43,11 @@ export default function BarraUsuario() {
           .single();
         setEhAdmin(perfil?.perfil === "admin");
         setNome(perfil?.nome_completo || null);
+        setTipoPerfil((perfil?.perfil as TipoPerfil) || null);
       } else {
         setEhAdmin(false);
         setNome(null);
+        setTipoPerfil(null);
       }
     }
     carregarPerfil();
@@ -148,10 +153,35 @@ export default function BarraUsuario() {
           )}
           <button
             onClick={() => setModalAberto("perfil")}
-            title="Editar nome, e-mail e senha"
-            style={{ ...linkEstilo(), color: "#fff" }}
+            title={`Editar nome, e-mail e senha — ${tipoPerfil ? NOMES_PERFIL[tipoPerfil] : "perfil"}`}
+            style={{
+              ...linkEstilo(),
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              textTransform: "none",
+              letterSpacing: 0,
+            }}
           >
-            👤 {nome || email}
+            <span
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                background: corPerfil(tipoPerfil),
+                color: textoAvatarPerfil(tipoPerfil),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                fontWeight: 800,
+                flexShrink: 0,
+              }}
+            >
+              {(nome || email || "?").trim().charAt(0).toUpperCase()}
+            </span>
+            {nome || email}
           </button>
           <ThemeToggle />
           <button

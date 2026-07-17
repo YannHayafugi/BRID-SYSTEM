@@ -4,12 +4,14 @@
  * modal aberto a partir do header (D18). */
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { corPerfil, NOMES_PERFIL, textoAvatarPerfil } from "@/lib/perfil";
 
 export default function PerfilConteudo() {
   const [carregando, setCarregando] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
   const [nome, setNome] = useState("");
+  const [tipoPerfil, setTipoPerfil] = useState<string | null>(null);
   const [emailAtual, setEmailAtual] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -33,10 +35,11 @@ export default function PerfilConteudo() {
       setEmail(data.user.email || "");
       const { data: perfil } = await supabase
         .from("gp_profiles")
-        .select("nome_completo")
+        .select("nome_completo, perfil")
         .eq("id", data.user.id)
         .single();
       setNome(perfil?.nome_completo || "");
+      setTipoPerfil(perfil?.perfil || null);
       setCarregando(false);
     })();
   }, []);
@@ -111,6 +114,23 @@ export default function PerfilConteudo() {
 
   return (
     <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <span
+          style={{
+            width: 44, height: 44, borderRadius: "50%",
+            background: corPerfil(tipoPerfil), color: textoAvatarPerfil(tipoPerfil),
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, fontWeight: 800, flexShrink: 0,
+          }}
+        >
+          {(nome || emailAtual || "?").trim().charAt(0).toUpperCase()}
+        </span>
+        <div>
+          <strong style={{ display: "block" }}>{nome || emailAtual}</strong>
+          <span className="detalhe">{tipoPerfil ? NOMES_PERFIL[tipoPerfil] || tipoPerfil : "Perfil"}</span>
+        </div>
+      </div>
+
       {msg && (
         <p className={`msg ${msg.tipo}`} style={{ marginBottom: 16 }}>
           {msg.texto}
