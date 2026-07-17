@@ -18,10 +18,6 @@ interface FiltrosOrgaos {
 
 const FILTROS_VAZIOS: FiltrosOrgaos = { q: "", tipo: "", de: "", ate: "" };
 
-function novoContatoVazio(): NovoContatoInput {
-  return { nomeCompleto: "", cargo: "", telefone: "", email: "" };
-}
-
 export default function OrgaosConteudo() {
   const [filtrosInput, setFiltrosInput] = useState<FiltrosOrgaos>(FILTROS_VAZIOS);
   const [filtrosAplicados, setFiltrosAplicados] = useState<FiltrosOrgaos>(FILTROS_VAZIOS);
