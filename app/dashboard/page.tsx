@@ -136,34 +136,35 @@ export default function DashboardPage() {
   const percMunicipio = total ? Math.round((municipios / total) * 100) : 0;
 
   const funil = useMemo(() => [
-    { rotulo: "TR", valor: processosFiltrados.filter(temTR).length },
-    { rotulo: "Proposta", valor: processosFiltrados.filter(temProposta).length },
-    { rotulo: "Aprovação", valor: processosFiltrados.filter((p) => p.proposta_aprovada).length },
-    { rotulo: "Ofício", valor: processosFiltrados.filter(temOficio).length },
+    { rotulo: "TR", valor: processosFiltrados.filter(temTR).length, processos: processosFiltrados.filter(temTR) },
+    { rotulo: "Proposta", valor: processosFiltrados.filter(temProposta).length, processos: processosFiltrados.filter(temProposta) },
+    { rotulo: "Aprovação", valor: processosFiltrados.filter((p) => p.proposta_aprovada).length, processos: processosFiltrados.filter((p) => p.proposta_aprovada) },
+    { rotulo: "Ofício", valor: processosFiltrados.filter(temOficio).length, processos: processosFiltrados.filter(temOficio) },
   ], [processosFiltrados]);
 
   const porMes = useMemo(() => {
-    const mapa = new Map<string, number>();
+    const mapa = new Map<string, Processo[]>();
     processosFiltrados.forEach((p) => {
       const d = new Date(p.data);
       const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      mapa.set(chave, (mapa.get(chave) || 0) + 1);
+      mapa.set(chave, [...(mapa.get(chave) || []), p]);
     });
     const chaves = Array.from(mapa.keys()).sort().slice(-6);
     return chaves.map((chave) => {
       const [ano, mes] = chave.split("-");
-      return { rotulo: `${MESES_ABREV[Number(mes) - 1]}/${ano.slice(2)}`, valor: mapa.get(chave) || 0 };
+      const processosDoMes = mapa.get(chave) || [];
+      return { rotulo: `${MESES_ABREV[Number(mes) - 1]}/${ano.slice(2)}`, valor: processosDoMes.length, processos: processosDoMes };
     });
   }, [processosFiltrados]);
 
   const rankingOrgaos = contagemPorOrgao.slice(0, 10);
 
   const faseAutoManual = useMemo(() => {
-    const auto = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "auto").length;
-    const manual = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "manual").length;
+    const auto = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "auto");
+    const manual = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "manual");
     return [
-      { rotulo: "Automática", valor: auto, cor: "var(--primaria)" },
-      { rotulo: "Manual", valor: manual, cor: "#5a6b7b" },
+      { rotulo: "Automática", valor: auto.length, cor: "var(--primaria)", processos: auto },
+      { rotulo: "Manual", valor: manual.length, cor: "#5a6b7b", processos: manual },
     ];
   }, [processosFiltrados, etapas]);
 
@@ -268,21 +269,22 @@ export default function DashboardPage() {
       <div className="dash-graficos">
         <div className="dash-col">
           <h3>🔻 Funil de conversão</h3>
-          <BarrasHorizontais dados={funil} />
+          <BarrasHorizontais dados={funil} renderPopover={(d) => popoverLista(d.rotulo, d.processos)} />
         </div>
         <div className="dash-col">
           <h3>📈 Processos abertos por mês</h3>
-          <BarrasMensais dados={porMes} />
+          <BarrasMensais dados={porMes} renderPopover={(d) => popoverLista(d.rotulo, d.processos)} />
         </div>
         <div className="dash-col">
           <h3>🏛️ Processos por órgão</h3>
           <div className="dash-scroll">
-            <BarrasHorizontais dados={rankingOrgaos} vazio="Nenhum órgão com processos no período." />
+            <BarrasHorizontais dados={rankingOrgaos} vazio="Nenhum órgão com processos no período."
+              renderPopover={(d) => popoverLista(d.rotulo, d.processos)} />
           </div>
         </div>
         <div className="dash-col">
           <h3>🤖 Fase automática x manual</h3>
-          <Donut dados={faseAutoManual} />
+          <Donut dados={faseAutoManual} renderPopover={(d) => popoverLista(d.rotulo, d.processos)} />
         </div>
       </div>
 
@@ -297,7 +299,7 @@ export default function DashboardPage() {
               const aberta = faseAberta === i;
               return (
                 <div key={i}>
-                  <HoverCard conteudo={popoverLista(`Processos na fase ${i + 1}. ${e.nome}`, processosFase)}>
+                  <HoverCard posicao="direita" conteudo={popoverLista(`Processos na fase ${i + 1}. ${e.nome}`, processosFase)}>
                     <div className="item fase-linha" style={{ cursor: qtd ? "pointer" : "default" }}
                       onClick={() => qtd && setFaseAberta(aberta ? null : i)}>
                       <span className="fase-nome">
@@ -330,7 +332,7 @@ export default function DashboardPage() {
             {total ? processosFiltrados.map((p) => {
               const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
               return (
-                <HoverCard key={p.id} largura={300}
+                <HoverCard key={p.id} largura={300} posicao="direita"
                   conteudo={
                     <div>
                       <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{p.titulo} — fase atual</p>
