@@ -299,16 +299,15 @@ export default function DashboardPage() {
               const aberta = faseAberta === i;
               return (
                 <div key={i}>
-                  <HoverCard posicao="direita" conteudo={popoverLista(`Processos na fase ${i + 1}. ${e.nome}`, processosFase)}>
-                    <div className="item fase-linha" style={{ cursor: qtd ? "pointer" : "default" }}
-                      onClick={() => qtd && setFaseAberta(aberta ? null : i)}>
-                      <span className="fase-nome">
-                        {qtd ? (aberta ? "▾ " : "▸ ") : ""}{i + 1}. {e.nome} {e.tipo === "auto" ? "🤖" : "✋"}
-                      </span>
-                      <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
-                      <span className="fase-qtd">{qtd}</span>
-                    </div>
-                  </HoverCard>
+                  <div className="item fase-linha" style={{ cursor: qtd ? "pointer" : "default" }}
+                    onClick={() => qtd && setFaseAberta(aberta ? null : i)}
+                    title={qtd ? `Clique para ${aberta ? "recolher" : "ver"} os ${qtd} processo(s) desta fase` : `0 processo(s) na fase ${i + 1}`}>
+                    <span className="fase-nome">
+                      {qtd ? (aberta ? "▾ " : "▸ ") : ""}{i + 1}. {e.nome} {e.tipo === "auto" ? "🤖" : "✋"}
+                    </span>
+                    <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
+                    <span className="fase-qtd">{qtd}</span>
+                  </div>
                   {aberta && (
                     <div style={{ paddingLeft: 16, borderLeft: "2px solid var(--primaria-claro)", marginBottom: 6 }}>
                       {processosFase.map((p) => (

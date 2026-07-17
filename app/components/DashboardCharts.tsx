@@ -37,7 +37,7 @@ export function BarrasHorizontais<T extends ItemBase>({
           </div>
         );
         return renderPopover ? (
-          <HoverCard key={i} posicao="direita" conteudo={renderPopover(d, i)}>
+          <HoverCard key={i} conteudo={renderPopover(d, i)}>
             {barra}
           </HoverCard>
         ) : (
@@ -76,7 +76,7 @@ export function BarrasMensais<T extends ItemBase>({
           </div>
         );
         return renderPopover ? (
-          <HoverCard key={i} largura={220} conteudo={renderPopover(d, i)}>
+          <HoverCard key={i} largura={220} estiloTrigger={{ flex: 1, height: "100%" }} conteudo={renderPopover(d, i)}>
             {coluna}
           </HoverCard>
         ) : (
@@ -141,7 +141,7 @@ export function Donut<T extends ItemDonut>({
             </div>
           );
           return renderPopover ? (
-            <HoverCard key={i} posicao="direita" conteudo={renderPopover(d, i)}>
+            <HoverCard key={i} conteudo={renderPopover(d, i)}>
               {linha}
             </HoverCard>
           ) : (
