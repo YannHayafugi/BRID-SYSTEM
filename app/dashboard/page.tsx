@@ -5,14 +5,18 @@
  * D20: filtros por Órgão, Data (período) e Status (fase) do processo. */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BarrasHorizontais, BarrasMensais, Donut } from "@/app/components/DashboardCharts";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
-interface Orgao { id: string; razao_social: string }
+interface Orgao { id: string; razao_social: string; tipo_ente?: string }
 interface Processo {
   id: string; titulo: string; etapa: number; tr_nome: string;
   arquivos: string[]; documentos: { oficio?: unknown };
-  orgao: Orgao | null; data: string; atualizado_em: string;
+  orgao: Orgao | null; data: string; atualizado_em: string; proposta_aprovada: boolean;
 }
+
+const DIAS_ESTAGNADO = 15;
+const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 const FILTROS_VAZIOS = { orgaoId: "", de: "", ate: "", etapa: "" };
 
@@ -92,6 +96,67 @@ export default function DashboardPage() {
     return [{ p, msg: `Fase atual: ${etapas[p.etapa]?.nome || "-"}`, pronto: false }];
   });
 
+  // ---- D24: KPIs e gráficos adicionais ----
+  const comProposta = processosFiltrados.filter(temProposta);
+  const taxaAprovacao = comProposta.length
+    ? Math.round((comProposta.filter((p) => p.proposta_aprovada).length / comProposta.length) * 100)
+    : 0;
+
+  const agora = Date.now();
+  const estagnados = processosFiltrados.filter((p) => {
+    if (etapas.length && p.etapa >= etapas.length - 1) return false; // já concluído
+    const diasParado = (agora - new Date(p.atualizado_em).getTime()) / 86400000;
+    return diasParado >= DIAS_ESTAGNADO;
+  }).length;
+
+  const contagemPorOrgao = useMemo(() => {
+    const mapa = new Map<string, { rotulo: string; valor: number }>();
+    processosFiltrados.forEach((p) => {
+      if (!p.orgao) return;
+      const atual = mapa.get(p.orgao.id) || { rotulo: p.orgao.razao_social, valor: 0 };
+      atual.valor += 1;
+      mapa.set(p.orgao.id, atual);
+    });
+    return Array.from(mapa.values()).sort((a, b) => b.valor - a.valor);
+  }, [processosFiltrados]);
+  const orgaoTop = contagemPorOrgao[0] || null;
+
+  const municipios = processosFiltrados.filter((p) => p.orgao?.tipo_ente === "Município").length;
+  const estados = processosFiltrados.filter((p) => p.orgao?.tipo_ente === "Estado").length;
+  const percMunicipio = total ? Math.round((municipios / total) * 100) : 0;
+
+  const funil = useMemo(() => [
+    { rotulo: "TR", valor: processosFiltrados.filter(temTR).length },
+    { rotulo: "Proposta", valor: processosFiltrados.filter(temProposta).length },
+    { rotulo: "Aprovação", valor: processosFiltrados.filter((p) => p.proposta_aprovada).length },
+    { rotulo: "Ofício", valor: processosFiltrados.filter(temOficio).length },
+  ], [processosFiltrados]);
+
+  const porMes = useMemo(() => {
+    const mapa = new Map<string, number>();
+    processosFiltrados.forEach((p) => {
+      const d = new Date(p.data);
+      const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      mapa.set(chave, (mapa.get(chave) || 0) + 1);
+    });
+    const chaves = Array.from(mapa.keys()).sort().slice(-6);
+    return chaves.map((chave) => {
+      const [ano, mes] = chave.split("-");
+      return { rotulo: `${MESES_ABREV[Number(mes) - 1]}/${ano.slice(2)}`, valor: mapa.get(chave) || 0 };
+    });
+  }, [processosFiltrados]);
+
+  const rankingOrgaos = contagemPorOrgao.slice(0, 10);
+
+  const faseAutoManual = useMemo(() => {
+    const auto = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "auto").length;
+    const manual = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "manual").length;
+    return [
+      { rotulo: "Automática", valor: auto, cor: "var(--primaria)" },
+      { rotulo: "Manual", valor: manual, cor: "#5a6b7b" },
+    ];
+  }, [processosFiltrados, etapas]);
+
   if (carregando) return <div className="page-larga"><p className="vazio">Carregando...</p></div>;
 
   return (
@@ -151,6 +216,47 @@ export default function DashboardPage() {
           <span className="kpi-valor">{eficacia}% <small>({concluidos} concl.)</small></span>
           <span className="kpi-nome">Eficácia</span>
           <span className="kpi-desc">convertidos em contrato</span>
+        </div>
+        <div className="kpi" title="Percentual de propostas geradas que já foram aprovadas">
+          <span className="kpi-valor">{taxaAprovacao}%</span>
+          <span className="kpi-nome">Aprovação de Proposta</span>
+          <span className="kpi-desc">{comProposta.length ? `${comProposta.filter((p) => p.proposta_aprovada).length} de ${comProposta.length} propostas` : "nenhuma proposta gerada"}</span>
+        </div>
+        <div className="kpi" title={`Processos sem atualização há ${DIAS_ESTAGNADO} dias ou mais`}>
+          <span className="kpi-valor" style={estagnados ? { color: "#c2410c" } : undefined}>{estagnados}</span>
+          <span className="kpi-nome">Estagnados</span>
+          <span className="kpi-desc">sem atualização há {DIAS_ESTAGNADO}+ dias</span>
+        </div>
+        <div className="kpi" title="Órgão (cliente) com mais processos abertos no período filtrado">
+          <span className="kpi-valor" style={{ fontSize: 15 }}>{orgaoTop ? orgaoTop.rotulo : "-"}</span>
+          <span className="kpi-nome">Órgão com mais processos</span>
+          <span className="kpi-desc">{orgaoTop ? `${orgaoTop.valor} processo(s)` : "sem processos"}</span>
+        </div>
+        <div className="kpi" title="Percentual de processos de órgãos do tipo Município vs Estado">
+          <span className="kpi-valor">{percMunicipio}% <small>Município</small></span>
+          <span className="kpi-nome">Município x Estado</span>
+          <span className="kpi-desc">{municipios} Município · {estados} Estado</span>
+        </div>
+      </div>
+
+      <div className="dash-graficos">
+        <div className="dash-col">
+          <h3>🔻 Funil de conversão</h3>
+          <BarrasHorizontais dados={funil} />
+        </div>
+        <div className="dash-col">
+          <h3>📈 Processos abertos por mês</h3>
+          <BarrasMensais dados={porMes} />
+        </div>
+        <div className="dash-col">
+          <h3>🏛️ Processos por órgão</h3>
+          <div className="dash-scroll">
+            <BarrasHorizontais dados={rankingOrgaos} vazio="Nenhum órgão com processos no período." />
+          </div>
+        </div>
+        <div className="dash-col">
+          <h3>🤖 Fase automática x manual</h3>
+          <Donut dados={faseAutoManual} />
         </div>
       </div>
 
