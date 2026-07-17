@@ -1,10 +1,11 @@
 :root {
-  --primaria: #2563eb;      /* azul T21M (D10 híbrido) */
-  --primaria-claro: #eef4ff;
+  --primaria: #c9a227;      /* dourado Grupo BRID (D16 — paleta da marca) */
+  --primaria-claro: #faf3dd;
   --verde-fia: var(--primaria);        /* telas herdadas re-tematizadas */
   --verde-claro: var(--primaria-claro);
   --cinza: #667085;
   --borda: #d8dee3;
+  --escuro: #14120d;        /* preto quente da marca — navbar e header */
 }
 
 * {
@@ -66,7 +67,7 @@
   padding: 13px;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
+  color: var(--escuro);
   background: var(--primaria);
   border: none;
   border-radius: 10px;
@@ -98,14 +99,15 @@ body {
 }
 
 header.topo {
-  background: var(--verde-fia);
-  color: #fff;
+  background: var(--escuro);
+  color: var(--primaria);
   padding: 20px 24px;
 }
 
 header.topo h1 {
   margin: 0;
   font-size: 20px;
+  color: #fff;
 }
 
 header.topo p {
@@ -203,7 +205,7 @@ textarea {
 
 .btn {
   background: var(--verde-fia);
-  color: #fff;
+  color: var(--escuro);
   border: none;
   border-radius: 6px;
   padding: 10px 18px;
@@ -304,7 +306,7 @@ textarea {
 .detalhe { display:block; color:var(--cinza); font-size:13px; margin-top:4px; }
 .vazio { color:var(--cinza); }
 
-.btn-azul { padding:11px 22px; font-size:14px; font-weight:600; color:#fff; background:var(--primaria);
+.btn-azul { padding:11px 22px; font-size:14px; font-weight:600; color:var(--escuro); background:var(--primaria);
   border:none; border-radius:8px; cursor:pointer; }
 .btn-azul:disabled { background:#b3c2d1; cursor:not-allowed; }
 .btn-dl { padding:10px 18px; background:#16a34a; color:#fff; text-decoration:none; border-radius:8px;

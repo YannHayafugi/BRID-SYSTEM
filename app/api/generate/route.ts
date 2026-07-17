@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildProposalDocx } from "@/lib/docxBuilder";
 import { PropostaFormData } from "@/lib/types";
+import { getProfileAtual } from "@/lib/supabase/route";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const profile = await getProfileAtual();
+  if (!profile) {
+    return NextResponse.json({ error: "Sessão expirada. Faça login novamente." }, { status: 401 });
+  }
+
   try {
     const data = (await req.json()) as PropostaFormData;
 

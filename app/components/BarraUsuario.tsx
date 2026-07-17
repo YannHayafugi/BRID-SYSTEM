@@ -64,10 +64,10 @@ export default function BarraUsuario() {
         alignItems: "center",
         gap: 16,
         padding: "8px 20px",
-        background: "#fff",
-        borderBottom: "1px solid var(--borda)",
+        background: "var(--escuro)",
+        borderBottom: "1px solid #2a2620",
         fontSize: 13,
-        color: "var(--cinza)",
+        color: "#c9c4b6",
         position: "sticky",
         top: 0,
         zIndex: 50,
@@ -88,8 +88,8 @@ export default function BarraUsuario() {
                   fontWeight: 600,
                   fontSize: 14,
                   textDecoration: "none",
-                  color: ativa ? "var(--primaria)" : "var(--cinza)",
-                  background: ativa ? "var(--primaria-claro)" : "transparent",
+                  color: ativa ? "var(--escuro)" : "var(--primaria)",
+                  background: ativa ? "var(--primaria)" : "transparent",
                 }}
               >
                 {a.rotulo}
@@ -119,10 +119,10 @@ export default function BarraUsuario() {
           title="Sair do sistema"
           style={{
             background: "none",
-            border: "1px solid var(--borda)",
+            border: "1px solid #3a3529",
             borderRadius: 8,
             padding: "6px 12px",
-            color: "var(--cinza)",
+            color: "#c9c4b6",
             fontWeight: 600,
             cursor: "pointer",
             fontSize: 13,
