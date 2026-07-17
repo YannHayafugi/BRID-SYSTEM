@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import Modal from "./Modal";
 import ThemeToggle from "./ThemeToggle";
+import NotificacoesBotao from "./NotificacoesBotao";
 import OrgaosConteudo from "./OrgaosConteudo";
 import HistoricoConteudo from "./HistoricoConteudo";
 import PerfilConteudo from "./PerfilConteudo";
@@ -183,6 +184,7 @@ export default function BarraUsuario() {
             </span>
             {nome || email}
           </button>
+          <NotificacoesBotao />
           <ThemeToggle />
           <button
             onClick={sair}

@@ -6,7 +6,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BarrasHorizontais, BarrasMensais, Donut } from "@/app/components/DashboardCharts";
-import Modal from "@/app/components/Modal";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string }
@@ -21,19 +20,12 @@ const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "se
 
 const FILTROS_VAZIOS = { orgaoId: "", de: "", ate: "", etapa: "" };
 
-function fmtData(iso: string) {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
 export default function DashboardPage() {
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
   const [faseAberta, setFaseAberta] = useState<number | null>(null);
-  const [notificacoesAbertas, setNotificacoesAbertas] = useState(false);
 
   useEffect(() => {
     fetch("/api/processos").then(async (r) => {
@@ -83,23 +75,6 @@ export default function DashboardPage() {
   const emContrato = processosFiltrados.filter((p) => p.etapa >= nAuto).length;
   const concluidos = processosFiltrados.filter((p) => p.etapa >= etapas.length - 1).length;
   const eficacia = total ? Math.round((emContrato / total) * 100) : 0;
-
-  const primeiraManual = etapas.findIndex((e) => e.tipo === "manual");
-
-  const avisosAutomacao = processosFiltrados.flatMap((p) => {
-    if (!temOficio(p)) return [{ p, msg: "sem Ofício de abertura — gere ou anexe pelo Follow-up", pronto: false }];
-    if (!temTR(p)) return [{ p, msg: "aguardando envio do TR", pronto: false }];
-    if (!temProposta(p)) return [{ p, msg: "TR enviado — pronto para gerar a Proposta 🤖", pronto: true }];
-    return [];
-  });
-
-  const avisosManual = processosFiltrados.flatMap((p) => {
-    if (primeiraManual < 0 || p.etapa < primeiraManual) return [];
-    return [{ p, msg: `Fase atual: ${etapas[p.etapa]?.nome || "-"}`, pronto: false }];
-  });
-
-  const totalAvisos = avisosAutomacao.length + avisosManual.length;
-  const avisosProntos = avisosAutomacao.filter((a) => a.pronto).length;
 
   // ---- D24: KPIs e gráficos adicionais ----
   const comProposta = processosFiltrados.filter(temProposta);
@@ -200,34 +175,6 @@ export default function DashboardPage() {
           {total} de {processos.length} processo(s)
         </span>
       </div>
-
-      <button
-        type="button"
-        onClick={() => setNotificacoesAbertas(true)}
-        className="btn-azul"
-        style={{
-          display: "flex", alignItems: "center", gap: 10, marginBottom: 16,
-          background: totalAvisos ? "var(--primaria)" : "var(--bg-card)",
-          border: totalAvisos ? "none" : "1px solid var(--borda)",
-          color: totalAvisos ? "var(--escuro)" : "var(--texto)",
-        }}
-        title="Ver notificações de automação e de fases manuais"
-      >
-        🔔 Notificações
-        {totalAvisos > 0 && (
-          <span style={{
-            background: "var(--escuro)", color: "var(--primaria)", borderRadius: 999,
-            fontSize: 12, fontWeight: 800, padding: "2px 9px",
-          }}>
-            {totalAvisos}
-          </span>
-        )}
-        {avisosProntos > 0 && (
-          <span className="detalhe" style={{ color: totalAvisos ? "var(--escuro)" : undefined }}>
-            {avisosProntos} pronto(s) para gerar Proposta 🤖
-          </span>
-        )}
-      </button>
 
       <div className="dash-kpis">
         <div className="kpi" title="Percentual de processos com os 3 documentos essenciais completos">
@@ -349,36 +296,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-
-      {notificacoesAbertas && (
-        <Modal titulo="🔔 Notificações" onFechar={() => setNotificacoesAbertas(false)}>
-          <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "4px 0" }}>🤖 Automação</span>
-          {avisosAutomacao.length ? avisosAutomacao.map((a, i) => (
-            <Link href={`/followup?processo=${a.p.id}`} className={`item notif ${a.pronto ? "pronto" : ""}`} key={i}
-              style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
-              title="Abrir este processo no Follow-up" onClick={() => setNotificacoesAbertas(false)}>
-              <div>
-                <strong>{a.p.titulo}</strong>
-                <span className="detalhe">{a.msg}</span>
-                <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
-              </div>
-            </Link>
-          )) : <p className="vazio">✅ Nenhuma pendência de automação.</p>}
-
-          <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "12px 0 4px" }}>✋ Manual</span>
-          {avisosManual.length ? avisosManual.map((a, i) => (
-            <Link href={`/followup?processo=${a.p.id}`} className="item notif" key={i}
-              style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
-              title="Abrir este processo no Follow-up" onClick={() => setNotificacoesAbertas(false)}>
-              <div>
-                <strong>{a.p.titulo}</strong>
-                <span className="detalhe">{a.msg}</span>
-                <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
-              </div>
-            </Link>
-          )) : <p className="vazio">✅ Nenhum processo em fase manual.</p>}
-        </Modal>
-      )}
     </div>
   );
 }

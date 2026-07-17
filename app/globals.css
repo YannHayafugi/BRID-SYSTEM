@@ -368,7 +368,11 @@ textarea {
 .form-projeto input, .form-projeto select { width:100%; padding:11px 12px; font-size:14px;
   border:1px solid var(--borda); border-radius:8px; margin-bottom:10px; }
 
-.dash-kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; }
+/* D28: grades padronizadas em até 4 cards por linha (KPIs e gráficos),
+ * reduzindo colunas de forma previsível em telas menores — em vez do
+ * auto-fit anterior, que deixava a quantidade de cards por linha variar
+ * de forma inconsistente conforme a largura disponível. */
+.dash-kpis { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
 .kpi { background:var(--bg-card); border:1px solid var(--borda); border-radius:12px; padding:12px 16px;
   display:flex; flex-direction:column; gap:2px; }
 .kpi-valor { font-size:21px; font-weight:800; color:var(--primaria); }
@@ -376,12 +380,19 @@ textarea {
 .kpi-nome { font-weight:700; }
 .kpi-desc { font-size:11px; color:var(--cinza); }
 .dash-colunas { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:14px; }
-.dash-graficos { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px; margin-top:14px; }
+.dash-graficos { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-top:14px; }
 .dash-col h3 { margin:0 0 8px; font-size:15px; border-bottom:1px solid var(--borda); padding-bottom:8px; }
 .dash-scroll { max-height:60vh; overflow-y:auto; padding-right:4px; }
 .notif { border-left:4px solid #c2410c; }
 .notif.pronto { border-left-color:#16a34a; }
 .fase-linha { display:flex; align-items:center; gap:12px; }
+
+@media (max-width:1200px) {
+  .dash-kpis, .dash-graficos { grid-template-columns:repeat(2, 1fr); }
+}
+@media (max-width:640px) {
+  .dash-kpis, .dash-graficos { grid-template-columns:1fr; }
+}
 .fase-nome { flex:1; min-width:0; font-size:13px; }
 .fase-barra { flex:1.2; height:8px; }
 .fase-qtd { font-weight:700; min-width:34px; text-align:right; font-size:13px; }
