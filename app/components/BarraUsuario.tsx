@@ -211,7 +211,7 @@ export default function BarraUsuario() {
         </Modal>
       )}
       {modalAberto === "historico" && (
-        <Modal titulo="Histórico de análises de TR" onFechar={() => setModalAberto(null)}>
+        <Modal titulo="Histórico" onFechar={() => setModalAberto(null)}>
           <HistoricoConteudo />
         </Modal>
       )}
