@@ -6,6 +6,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BarrasHorizontais, BarrasMensais, Donut } from "@/app/components/DashboardCharts";
+import HoverCard from "@/app/components/HoverCard";
+import ProcessoTimeline, { HistoricoEtapaTL } from "@/app/components/ProcessoTimeline";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string }
@@ -13,6 +15,7 @@ interface Processo {
   id: string; titulo: string; etapa: number; tr_nome: string;
   arquivos: string[]; documentos: { oficio?: unknown };
   orgao: Orgao | null; data: string; atualizado_em: string; proposta_aprovada: boolean;
+  historico_etapas: HistoricoEtapaTL[];
 }
 
 const DIAS_ESTAGNADO = 15;
@@ -20,17 +23,25 @@ const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "se
 
 const FILTROS_VAZIOS = { orgaoId: "", de: "", ate: "", etapa: "" };
 
-// D30: lista de processos usada nas dicas de ferramenta dos indicadores —
-// mostra o nome dos processos que compõem cada número, não só o total.
-function listaProcessos(lista: Processo[], max = 8): string {
-  if (!lista.length) return "Nenhum processo.";
-  const nomes = lista.map((p) => `• ${p.titulo}`);
-  const mostrados = nomes.slice(0, max).join("\n");
-  const resto = nomes.length > max ? `\n… e mais ${nomes.length - max}` : "";
-  return `${mostrados}${resto}`;
-}
-function dica(descricao: string, lista: Processo[], max = 8): string {
-  return `${descricao}\n\nProcessos:\n${listaProcessos(lista, max)}`;
+// D32: conteúdo do mini modal (HoverCard) que aparece ao passar o mouse
+// sobre os indicadores — lista os processos que compõem aquele número.
+function popoverLista(descricao: string, lista: Processo[]) {
+  return (
+    <div>
+      <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{descricao}</p>
+      {lista.length ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {lista.slice(0, 12).map((p) => (
+            <Link key={p.id} href={`/followup?processo=${p.id}`}
+              style={{ color: "var(--primaria)", textDecoration: "none" }}>
+              • {p.titulo}
+            </Link>
+          ))}
+          {lista.length > 12 && <span className="detalhe">…e mais {lista.length - 12}</span>}
+        </div>
+      ) : <p className="vazio" style={{ margin: 0 }}>Nenhum processo.</p>}
+    </div>
+  );
 }
 
 export default function DashboardPage() {
@@ -196,46 +207,62 @@ export default function DashboardPage() {
       </div>
 
       <div className="dash-kpis">
-        <div className="kpi" title={dica("Percentual de processos com os 3 documentos essenciais completos", completosLista)}>
-          <span className="kpi-valor">{qualidade}%</span>
-          <span className="kpi-nome">Qualidade</span>
-          <span className="kpi-desc">documentação essencial completa</span>
-        </div>
-        <div className="kpi" title={dica("Processos abertos e documentos gerados/anexados", processosFiltrados)}>
-          <span className="kpi-valor">{total} <small>proc.</small> · {totalDocs} <small>docs</small></span>
-          <span className="kpi-nome">Produtividade</span>
-          <span className="kpi-desc">processos e documentos no sistema</span>
-        </div>
-        <div className="kpi" title={dica("Quanto das fases automatizadas já foi percorrido, na média", processosFiltrados)}>
-          <span className="kpi-valor">{eficiencia}%</span>
-          <span className="kpi-nome">Eficiência</span>
-          <span className="kpi-desc">aproveitamento da automação</span>
-        </div>
-        <div className="kpi" title={dica("Processos que avançaram além da automação (contrato em diante)", emContratoLista)}>
-          <span className="kpi-valor">{eficacia}% <small>({concluidos} concl.)</small></span>
-          <span className="kpi-nome">Eficácia</span>
-          <span className="kpi-desc">convertidos em contrato</span>
-        </div>
-        <div className="kpi" title={dica("Percentual de propostas geradas que já foram aprovadas", comProposta)}>
-          <span className="kpi-valor">{taxaAprovacao}%</span>
-          <span className="kpi-nome">Aprovação de Proposta</span>
-          <span className="kpi-desc">{comProposta.length ? `${comProposta.filter((p) => p.proposta_aprovada).length} de ${comProposta.length} propostas` : "nenhuma proposta gerada"}</span>
-        </div>
-        <div className="kpi" title={dica(`Processos sem atualização há ${DIAS_ESTAGNADO} dias ou mais`, estagnadosLista)}>
-          <span className="kpi-valor" style={estagnados ? { color: "#c2410c" } : undefined}>{estagnados}</span>
-          <span className="kpi-nome">Estagnados</span>
-          <span className="kpi-desc">sem atualização há {DIAS_ESTAGNADO}+ dias</span>
-        </div>
-        <div className="kpi" title={dica("Órgão (cliente) com mais processos abertos no período filtrado", orgaoTop?.processos || [])}>
-          <span className="kpi-valor" style={{ fontSize: 15 }}>{orgaoTop ? orgaoTop.rotulo : "-"}</span>
-          <span className="kpi-nome">Órgão com mais processos</span>
-          <span className="kpi-desc">{orgaoTop ? `${orgaoTop.valor} processo(s)` : "sem processos"}</span>
-        </div>
-        <div className="kpi" title={dica("Percentual de processos de órgãos do tipo Município vs Estado", [...municipiosLista, ...estadosLista])}>
-          <span className="kpi-valor">{percMunicipio}% <small>Município</small></span>
-          <span className="kpi-nome">Município x Estado</span>
-          <span className="kpi-desc">{municipios} Município · {estados} Estado</span>
-        </div>
+        <HoverCard conteudo={popoverLista("Percentual de processos com os 3 documentos essenciais completos", completosLista)}>
+          <div className="kpi">
+            <span className="kpi-valor">{qualidade}%</span>
+            <span className="kpi-nome">Qualidade</span>
+            <span className="kpi-desc">documentação essencial completa</span>
+          </div>
+        </HoverCard>
+        <HoverCard conteudo={popoverLista("Processos abertos e documentos gerados/anexados", processosFiltrados)}>
+          <div className="kpi">
+            <span className="kpi-valor">{total} <small>proc.</small> · {totalDocs} <small>docs</small></span>
+            <span className="kpi-nome">Produtividade</span>
+            <span className="kpi-desc">processos e documentos no sistema</span>
+          </div>
+        </HoverCard>
+        <HoverCard conteudo={popoverLista("Quanto das fases automatizadas já foi percorrido, na média", processosFiltrados)}>
+          <div className="kpi">
+            <span className="kpi-valor">{eficiencia}%</span>
+            <span className="kpi-nome">Eficiência</span>
+            <span className="kpi-desc">aproveitamento da automação</span>
+          </div>
+        </HoverCard>
+        <HoverCard conteudo={popoverLista("Processos que avançaram além da automação (contrato em diante)", emContratoLista)}>
+          <div className="kpi">
+            <span className="kpi-valor">{eficacia}% <small>({concluidos} concl.)</small></span>
+            <span className="kpi-nome">Eficácia</span>
+            <span className="kpi-desc">convertidos em contrato</span>
+          </div>
+        </HoverCard>
+        <HoverCard conteudo={popoverLista("Percentual de propostas geradas que já foram aprovadas", comProposta)}>
+          <div className="kpi">
+            <span className="kpi-valor">{taxaAprovacao}%</span>
+            <span className="kpi-nome">Aprovação de Proposta</span>
+            <span className="kpi-desc">{comProposta.length ? `${comProposta.filter((p) => p.proposta_aprovada).length} de ${comProposta.length} propostas` : "nenhuma proposta gerada"}</span>
+          </div>
+        </HoverCard>
+        <HoverCard conteudo={popoverLista(`Processos sem atualização há ${DIAS_ESTAGNADO} dias ou mais`, estagnadosLista)}>
+          <div className="kpi">
+            <span className="kpi-valor" style={estagnados ? { color: "#c2410c" } : undefined}>{estagnados}</span>
+            <span className="kpi-nome">Estagnados</span>
+            <span className="kpi-desc">sem atualização há {DIAS_ESTAGNADO}+ dias</span>
+          </div>
+        </HoverCard>
+        <HoverCard conteudo={popoverLista("Órgão (cliente) com mais processos abertos no período filtrado", orgaoTop?.processos || [])}>
+          <div className="kpi">
+            <span className="kpi-valor" style={{ fontSize: 15 }}>{orgaoTop ? orgaoTop.rotulo : "-"}</span>
+            <span className="kpi-nome">Órgão com mais processos</span>
+            <span className="kpi-desc">{orgaoTop ? `${orgaoTop.valor} processo(s)` : "sem processos"}</span>
+          </div>
+        </HoverCard>
+        <HoverCard conteudo={popoverLista("Percentual de processos de órgãos do tipo Município vs Estado", [...municipiosLista, ...estadosLista])}>
+          <div className="kpi">
+            <span className="kpi-valor">{percMunicipio}% <small>Município</small></span>
+            <span className="kpi-nome">Município x Estado</span>
+            <span className="kpi-desc">{municipios} Município · {estados} Estado</span>
+          </div>
+        </HoverCard>
       </div>
 
       <div className="dash-graficos">
@@ -270,15 +297,16 @@ export default function DashboardPage() {
               const aberta = faseAberta === i;
               return (
                 <div key={i}>
-                  <div className="item fase-linha" style={{ cursor: qtd ? "pointer" : "default" }}
-                    onClick={() => qtd && setFaseAberta(aberta ? null : i)}
-                    title={qtd ? `Clique para ${aberta ? "recolher" : "ver"} os ${qtd} processo(s) desta fase` : `0 processo(s) na fase ${i + 1}`}>
-                    <span className="fase-nome">
-                      {qtd ? (aberta ? "▾ " : "▸ ") : ""}{i + 1}. {e.nome} {e.tipo === "auto" ? "🤖" : "✋"}
-                    </span>
-                    <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
-                    <span className="fase-qtd">{qtd}</span>
-                  </div>
+                  <HoverCard conteudo={popoverLista(`Processos na fase ${i + 1}. ${e.nome}`, processosFase)}>
+                    <div className="item fase-linha" style={{ cursor: qtd ? "pointer" : "default" }}
+                      onClick={() => qtd && setFaseAberta(aberta ? null : i)}>
+                      <span className="fase-nome">
+                        {qtd ? (aberta ? "▾ " : "▸ ") : ""}{i + 1}. {e.nome} {e.tipo === "auto" ? "🤖" : "✋"}
+                      </span>
+                      <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
+                      <span className="fase-qtd">{qtd}</span>
+                    </div>
+                  </HoverCard>
                   {aberta && (
                     <div style={{ paddingLeft: 16, borderLeft: "2px solid var(--primaria-claro)", marginBottom: 6 }}>
                       {processosFase.map((p) => (
@@ -302,14 +330,28 @@ export default function DashboardPage() {
             {total ? processosFiltrados.map((p) => {
               const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
               return (
-                <Link href={`/followup?processo=${p.id}`} className="item fase-linha" key={p.id}
-                  style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
-                  title={`Fase atual: ${etapas[p.etapa]?.nome || "-"} — clique para abrir o processo`}>
-                  <span className="fase-nome"><strong>{p.titulo}</strong>
-                    <span className="detalhe">{etapas[p.etapa]?.nome || ""}</span></span>
-                  <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
-                  <span className="fase-qtd">{pct}%</span>
-                </Link>
+                <HoverCard key={p.id} largura={300}
+                  conteudo={
+                    <div>
+                      <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{p.titulo} — fase atual</p>
+                      <ProcessoTimeline
+                        etapas={etapas}
+                        etapaAtual={p.etapa}
+                        historico={p.historico_etapas || []}
+                        bloqueado
+                        onSelecionar={() => {}}
+                      />
+                    </div>
+                  }
+                >
+                  <Link href={`/followup?processo=${p.id}`} className="item fase-linha"
+                    style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}>
+                    <span className="fase-nome"><strong>{p.titulo}</strong>
+                      <span className="detalhe">{etapas[p.etapa]?.nome || ""}</span></span>
+                    <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
+                    <span className="fase-qtd">{pct}%</span>
+                  </Link>
+                </HoverCard>
               );
             }) : <p className="vazio">Nenhum processo encontrado com esses filtros.</p>}
           </div>
