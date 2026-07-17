@@ -6,9 +6,10 @@
  * fases ✋ são selecionáveis. Cliente = órgão cadastrado (D6/D13), com
  * atalho de cadastro inline. Análise de TR pelo card (D12).
  */
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import Modal from "@/app/components/Modal";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string; cidade?: string; uf?: string }
@@ -44,7 +45,8 @@ function FollowupConteudo() {
   const [dataAutenticacao, setDataAutenticacao] = useState(hoje());
   const [confirmando, setConfirmando] = useState(false);
 
-  // formulário "abrir novo processo"
+  // formulário "abrir novo processo" — D36: virou modal
+  const [modalAbrirAberto, setModalAbrirAberto] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [orgaoId, setOrgaoId] = useState("");
   const [abrindo, setAbrindo] = useState(false);
@@ -54,6 +56,17 @@ function FollowupConteudo() {
   const [noRazao, setNoRazao] = useState("");
   const [noCidade, setNoCidade] = useState("");
   const [noUf, setNoUf] = useState("SP");
+
+  // D36: editar título do processo
+  const [editandoTitulo, setEditandoTitulo] = useState<string | null>(null);
+  const [tituloEditado, setTituloEditado] = useState("");
+  const [salvandoTitulo, setSalvandoTitulo] = useState(false);
+
+  // D36: filtros — Órgão, Data (período) e Status (fase)
+  const [filtroOrgao, setFiltroOrgao] = useState("");
+  const [filtroDe, setFiltroDe] = useState("");
+  const [filtroAte, setFiltroAte] = useState("");
+  const [filtroEtapa, setFiltroEtapa] = useState("");
 
   const carregar = useCallback(async () => {
     setErro("");
@@ -109,11 +122,36 @@ function FollowupConteudo() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro || "Falha ao abrir o processo.");
       setTitulo(""); setOrgaoId("");
+      setModalAbrirAberto(false);
       await carregar();
     } catch (err) {
       alert(`❌ ${err instanceof Error ? err.message : err}`);
     } finally {
       setAbrindo(false);
+    }
+  }
+
+  function iniciarEdicaoTitulo(p: Processo) {
+    setEditandoTitulo(p.id);
+    setTituloEditado(p.titulo);
+  }
+
+  async function salvarTitulo(id: string) {
+    if (!tituloEditado.trim()) { alert("Informe o título do processo."); return; }
+    setSalvandoTitulo(true);
+    try {
+      const r = await fetch(`/api/processos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titulo: tituloEditado }),
+      });
+      if (!r.ok) throw new Error((await r.json()).erro || "Falha ao salvar o título.");
+      setEditandoTitulo(null);
+      await carregar();
+    } catch (err) {
+      alert(`❌ ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setSalvandoTitulo(false);
     }
   }
 
@@ -177,6 +215,21 @@ function FollowupConteudo() {
     }
   }
 
+  const processosFiltrados = useMemo(() => {
+    return processos.filter((p) => {
+      if (filtroOrgao && p.orgao?.id !== filtroOrgao) return false;
+      if (filtroEtapa !== "" && p.etapa !== Number(filtroEtapa)) return false;
+      if (filtroDe && p.data < `${filtroDe}T00:00:00`) return false;
+      if (filtroAte && p.data > `${filtroAte}T23:59:59`) return false;
+      return true;
+    });
+  }, [processos, filtroOrgao, filtroDe, filtroAte, filtroEtapa]);
+
+  const filtrosAtivos = !!(filtroOrgao || filtroDe || filtroAte || filtroEtapa !== "");
+  function limparFiltros() {
+    setFiltroOrgao(""); setFiltroDe(""); setFiltroAte(""); setFiltroEtapa("");
+  }
+
   async function excluir(p: Processo) {
     if (!confirm(`Excluir o processo "${p.titulo}"?\n\nOs arquivos gerados dele também serão removidos.`)) return;
     const r = await fetch(`/api/processos/${p.id}`, { method: "DELETE" });
@@ -191,50 +244,96 @@ function FollowupConteudo() {
         Fluxo de documentos: TR → Proposta → Ofício. O Ofício só é liberado depois que a Proposta é aprovada.
       </p>
 
-      {/* Abrir novo processo */}
-      <form className="item item-col form-projeto" onSubmit={abrirProcesso} style={{ marginBottom: 24 }}>
-        <strong>Abrir novo processo</strong>
+      {/* D36: "Abrir novo processo" virou modal, aberto por este botão */}
+      <button type="button" className="btn-azul" style={{ marginBottom: 20 }}
+        onClick={() => setModalAbrirAberto(true)}>
+        ＋ Abrir processo
+      </button>
 
-        <div style={{ display: "flex", gap: 10, width: "100%", alignItems: "center" }}>
-          <select value={orgaoId} onChange={(e) => setOrgaoId(e.target.value)} required
-            style={{ flex: 1, marginBottom: 0, background: "var(--primaria-claro)", borderColor: "var(--primaria)" }}
-            title="Cliente do processo — órgão do cadastro central (D6). Obrigatório: define o processo.">
-            <option value="">— Órgão cadastrado (cliente) * —</option>
+      {modalAbrirAberto && (
+        <Modal titulo="Abrir novo processo" onFechar={() => setModalAbrirAberto(false)}>
+          <form className="item item-col form-projeto" onSubmit={abrirProcesso} style={{ boxShadow: "none", border: "none", padding: 0, margin: 0 }}>
+            <div style={{ display: "flex", gap: 10, width: "100%", alignItems: "center" }}>
+              <select value={orgaoId} onChange={(e) => setOrgaoId(e.target.value)} required
+                style={{ flex: 1, marginBottom: 0, background: "var(--primaria-claro)", borderColor: "var(--primaria)" }}
+                title="Cliente do processo — órgão do cadastro central (D6). Obrigatório: define o processo.">
+                <option value="">— Órgão cadastrado (cliente) * —</option>
+                {orgaos.map((o) => (
+                  <option key={o.id} value={o.id}>{o.razao_social} ({o.cidade}/{o.uf})</option>
+                ))}
+              </select>
+              <button type="button" className="btn-doc" onClick={() => setNovoOrgao(!novoOrgao)}
+                title="Cadastrar um órgão sem sair desta tela">＋ Novo órgão</button>
+            </div>
+
+            {novoOrgao && (
+              <div style={{ display: "flex", gap: 8, width: "100%", flexWrap: "wrap", background: "var(--bg-suave)", padding: 12, borderRadius: 8 }}>
+                <select value={noTipo} onChange={(e) => setNoTipo(e.target.value)} style={{ width: 130, marginBottom: 0 }}>
+                  <option>Município</option><option>Estado</option>
+                </select>
+                <input value={noRazao} onChange={(e) => setNoRazao(e.target.value)} placeholder="Razão social *" style={{ flex: 2, minWidth: 180, marginBottom: 0 }} />
+                <input value={noCidade} onChange={(e) => setNoCidade(e.target.value)} placeholder="Cidade *" style={{ flex: 1, minWidth: 120, marginBottom: 0 }} />
+                <input value={noUf} onChange={(e) => setNoUf(e.target.value.toUpperCase().slice(0, 2))} placeholder="UF" style={{ width: 60, marginBottom: 0 }} />
+                <button type="button" className="btn-azul" onClick={cadastrarOrgao}>Salvar órgão</button>
+              </div>
+            )}
+
+            <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required
+              placeholder="Título do processo *" title="Nome do processo no Follow-up" />
+
+            <button type="submit" className="btn-azul" disabled={abrindo}
+              title="Criar o processo — o próximo passo é enviar o TR">
+              {abrindo ? "Abrindo..." : "Abrir processo"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {/* D36: filtros — Órgão, Data (período) e Status (fase) */}
+      <div className="item" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 20 }}>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>Órgão</label>
+          <select value={filtroOrgao} onChange={(e) => setFiltroOrgao(e.target.value)}>
+            <option value="">Todos</option>
             {orgaos.map((o) => (
-              <option key={o.id} value={o.id}>{o.razao_social} ({o.cidade}/{o.uf})</option>
+              <option key={o.id} value={o.id}>{o.razao_social}</option>
             ))}
           </select>
-          <button type="button" className="btn-doc" onClick={() => setNovoOrgao(!novoOrgao)}
-            title="Cadastrar um órgão sem sair desta tela">＋ Novo órgão</button>
         </div>
-
-        {novoOrgao && (
-          <div style={{ display: "flex", gap: 8, width: "100%", flexWrap: "wrap", background: "var(--bg-suave)", padding: 12, borderRadius: 8 }}>
-            <select value={noTipo} onChange={(e) => setNoTipo(e.target.value)} style={{ width: 130, marginBottom: 0 }}>
-              <option>Município</option><option>Estado</option>
-            </select>
-            <input value={noRazao} onChange={(e) => setNoRazao(e.target.value)} placeholder="Razão social *" style={{ flex: 2, minWidth: 180, marginBottom: 0 }} />
-            <input value={noCidade} onChange={(e) => setNoCidade(e.target.value)} placeholder="Cidade *" style={{ flex: 1, minWidth: 120, marginBottom: 0 }} />
-            <input value={noUf} onChange={(e) => setNoUf(e.target.value.toUpperCase().slice(0, 2))} placeholder="UF" style={{ width: 60, marginBottom: 0 }} />
-            <button type="button" className="btn-azul" onClick={cadastrarOrgao}>Salvar órgão</button>
-          </div>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>De</label>
+          <input type="date" value={filtroDe} onChange={(e) => setFiltroDe(e.target.value)} />
+        </div>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>Até</label>
+          <input type="date" value={filtroAte} onChange={(e) => setFiltroAte(e.target.value)} />
+        </div>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>Status (fase)</label>
+          <select value={filtroEtapa} onChange={(e) => setFiltroEtapa(e.target.value)}>
+            <option value="">Todos</option>
+            {etapas.map((e2, i) => (
+              <option key={i} value={i}>{i + 1}. {e2.nome}</option>
+            ))}
+          </select>
+        </div>
+        {filtrosAtivos && (
+          <button type="button" className="btn-doc" onClick={limparFiltros}>Limpar filtros</button>
         )}
-
-        <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required
-          placeholder="Título do processo *" title="Nome do processo no Follow-up" />
-
-        <button type="submit" className="btn-azul" disabled={abrindo}
-          title="Criar o processo — o próximo passo é enviar o TR">
-          {abrindo ? "Abrindo..." : "Abrir processo"}
-        </button>
-      </form>
+        <span className="detalhe" style={{ marginLeft: "auto" }}>
+          {processosFiltrados.length} de {processos.length} processo(s)
+        </span>
+      </div>
 
       {/* Cards dos processos */}
       {carregando && <p className="vazio">Carregando...</p>}
       {erro && <p className="vazio">❌ {erro}</p>}
       {!carregando && !processos.length && <p className="vazio">Nenhum processo aberto ainda.</p>}
+      {!carregando && processos.length > 0 && !processosFiltrados.length && (
+        <p className="vazio">Nenhum processo encontrado com esses filtros.</p>
+      )}
 
-      {processos.map((p) => {
+      {processosFiltrados.map((p) => {
         const et = etapas[p.etapa] || { nome: "-", tipo: "manual" };
         const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
         const temTR = p.arquivos.includes("tr");
@@ -250,7 +349,23 @@ function FollowupConteudo() {
             <div className="fu-topo">
               <button type="button" className="fu-excluir" onClick={() => excluir(p)}
                 title="Excluir este processo e seus arquivos">🗑</button>
-              <strong>{p.titulo}</strong>
+              {editandoTitulo === p.id ? (
+                <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input value={tituloEditado} onChange={(e) => setTituloEditado(e.target.value)}
+                    style={{ marginBottom: 0, width: 220 }} autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter") salvarTitulo(p.id); if (e.key === "Escape") setEditandoTitulo(null); }} />
+                  <button type="button" className="btn-doc" disabled={salvandoTitulo} onClick={() => salvarTitulo(p.id)}>
+                    {salvandoTitulo ? "Salvando..." : "Salvar"}
+                  </button>
+                  <button type="button" className="btn-doc" onClick={() => setEditandoTitulo(null)}>Cancelar</button>
+                </span>
+              ) : (
+                <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <strong>{p.titulo}</strong>
+                  <button type="button" className="fu-excluir" onClick={() => iniciarEdicaoTitulo(p)}
+                    title="Editar título do processo">✏️</button>
+                </span>
+              )}
               <span className={`fu-badge ${et.tipo}`}
                 title={et.tipo === "auto" ? "Fase coberta pela automação de documentos" : "Fase conduzida manualmente"}>
                 {et.tipo === "auto" ? "🤖 Automatizada" : "✋ Manual"}

@@ -4,6 +4,32 @@ import { removerArquivos } from "@/lib/processos/arquivos";
 
 export const runtime = "nodejs";
 
+/** Edita o título do processo. */
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const profile = await getProfileAtual();
+  if (!profile) {
+    return NextResponse.json({ erro: "Sessão expirada. Faça login novamente." }, { status: 401 });
+  }
+
+  const { titulo } = (await req.json().catch(() => ({}))) as { titulo?: string };
+  if (!titulo || !titulo.trim()) {
+    return NextResponse.json({ erro: "Informe o título do processo." }, { status: 400 });
+  }
+
+  const supabase = getSupabaseRouteClient();
+  const { data, error } = await supabase
+    .from("gp_processos")
+    .update({ titulo: titulo.trim(), updated_at: new Date().toISOString() })
+    .eq("id", params.id)
+    .select("id, titulo")
+    .single();
+  if (error || !data) {
+    return NextResponse.json({ erro: error?.message || "Processo não encontrado." }, { status: 404 });
+  }
+
+  return NextResponse.json({ ok: true, titulo: data.titulo });
+}
+
 /** Exclui o processo, seus arquivos exclusivos no storage e devolve ao drop
  * os ofícios do catálogo que estavam vinculados a ele. RLS garante que só o
  * dono (ou admin) consegue excluir. */
