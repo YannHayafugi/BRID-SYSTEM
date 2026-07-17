@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Contato, NovoContatoInput, OrgaoComContatos, TipoEnte, UFS_BRASIL } from "@/lib/orgaos/types";
 import { mascaraCnpj, mascaraTelefone } from "@/lib/mascaras";
+import AcaoProcessoCard, { AcaoProcesso } from "@/app/components/AcaoProcessoCard";
 
 function novoContatoVazio(): NovoContatoInput {
   return { nomeCompleto: "", cargo: "", telefone: "", email: "" };
@@ -16,6 +17,7 @@ export default function OrgaoDetalhePage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [orgao, setOrgao] = useState<OrgaoComContatos | null>(null);
+  const [processos, setProcessos] = useState<AcaoProcesso[]>([]);
 
   const [editando, setEditando] = useState(false);
   const [tipoEnte, setTipoEnte] = useState<TipoEnte>("Município");
@@ -38,6 +40,7 @@ export default function OrgaoDetalhePage() {
       const dados = await resp.json();
       if (!resp.ok || !dados.ok) throw new Error(dados.erro || "Falha ao carregar o órgão.");
       setOrgao(dados.orgao);
+      setProcessos(dados.processos || []);
       setTipoEnte(dados.orgao.tipo_ente);
       setRazaoSocial(dados.orgao.razao_social);
       setCnpj(mascaraCnpj(dados.orgao.cnpj || ""));
@@ -289,23 +292,22 @@ export default function OrgaoDetalhePage() {
         </section>
 
         <section className="card">
-          <h2>Ações</h2>
-          <div className="actions">
-            <Link
-              href={`/tr-analise?orgao=${orgao.id}`}
-              className="btn"
-              style={{ display: "inline-block", textDecoration: "none" }}
-            >
-              Analisar TR
-            </Link>
-            <Link
-              href={`/proposta?orgao=${orgao.id}`}
-              className="btn"
-              style={{ display: "inline-block", textDecoration: "none" }}
-            >
-              Gerar Proposta
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h2>Ações ({processos.length})</h2>
+            <Link href="/followup" className="btn secondary" style={{ display: "inline-block", textDecoration: "none" }}>
+              + Abrir processo no Follow-up
             </Link>
           </div>
+
+          {processos.length === 0 ? (
+            <p style={{ color: "var(--cinza)", fontSize: 13 }}>Nenhum processo aberto para este órgão ainda.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              {processos.map((p) => (
+                <AcaoProcessoCard key={p.id} processo={p} orgaoId={orgao.id} onAtualizado={carregar} />
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </main>

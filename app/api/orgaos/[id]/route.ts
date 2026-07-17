@@ -31,7 +31,33 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ erro: erroContatos.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, orgao: { ...orgao, contatos: contatos || [] } });
+  // Processos (Ações) deste órgão — usados na timeline de fases da página de detalhe.
+  const { data: processos, error: erroProcessos } = await supabase
+    .from("gp_processos")
+    .select("id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at")
+    .eq("orgao_id", params.id)
+    .order("created_at", { ascending: false });
+  if (erroProcessos) {
+    return NextResponse.json({ erro: erroProcessos.message }, { status: 500 });
+  }
+
+  const processosMapeados = (processos || []).map((p) => ({
+    id: p.id,
+    titulo: p.titulo,
+    data: p.created_at,
+    etapa: p.etapa,
+    documentos: p.documentos || {},
+    arquivos: Object.keys(p.arquivos || {}),
+    cadastro_tr_id: p.cadastro_tr_id,
+    proposta_aprovada: !!p.proposta_aprovada,
+    historico_etapas: p.historico_etapas || [],
+  }));
+
+  return NextResponse.json({
+    ok: true,
+    orgao: { ...orgao, contatos: contatos || [] },
+    processos: processosMapeados,
+  });
 }
 
 interface EditarOrgaoBody {
