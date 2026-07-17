@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import Modal from "./Modal";
+import ThemeToggle from "./ThemeToggle";
 import OrgaosConteudo from "./OrgaosConteudo";
 import HistoricoConteudo from "./HistoricoConteudo";
 import PerfilConteudo from "./PerfilConteudo";
@@ -146,6 +147,7 @@ export default function BarraUsuario() {
           >
             👤 {nome || email}
           </button>
+          <ThemeToggle />
           <button
             onClick={sair}
             title="Sair do sistema"

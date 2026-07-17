@@ -339,7 +339,7 @@ export default function OrgaosConteudo() {
                       ? Math.round(((a.etapa + 1) / ETAPAS_FLUXO.length) * 100)
                       : 0;
                     return (
-                      <div key={a.id} style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px" }}>
+                      <div key={a.id} style={{ background: "var(--bg-suave)", borderRadius: 8, padding: "8px 10px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                           <strong style={{ fontSize: 13 }}>{a.titulo}</strong>
                           <span className="detalhe" style={{ fontSize: 12 }}>{pct}%</span>

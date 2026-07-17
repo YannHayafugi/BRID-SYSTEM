@@ -208,7 +208,7 @@ function FollowupConteudo() {
         </div>
 
         {novoOrgao && (
-          <div style={{ display: "flex", gap: 8, width: "100%", flexWrap: "wrap", background: "#f8fafc", padding: 12, borderRadius: 8 }}>
+          <div style={{ display: "flex", gap: 8, width: "100%", flexWrap: "wrap", background: "var(--bg-suave)", padding: 12, borderRadius: 8 }}>
             <select value={noTipo} onChange={(e) => setNoTipo(e.target.value)} style={{ width: 130, marginBottom: 0 }}>
               <option>Município</option><option>Estado</option>
             </select>

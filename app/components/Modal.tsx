@@ -44,7 +44,8 @@ export default function Modal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#fff",
+          background: "var(--bg-card)",
+          color: "var(--texto)",
           borderRadius: 12,
           width: "100%",
           maxWidth: 720,

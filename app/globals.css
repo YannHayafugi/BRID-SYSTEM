@@ -5,7 +5,29 @@
   --verde-claro: var(--primaria-claro);
   --cinza: #667085;
   --borda: #d8dee3;
-  --escuro: #14120d;        /* preto quente da marca — navbar e header */
+  --escuro: #14120d;        /* preto quente da marca — navbar e header (fixo, não muda com o tema) */
+
+  /* D22: variáveis de tema — modo claro (padrão) */
+  --bg: #f5f6f7;
+  --bg-card: #ffffff;
+  --bg-suave: #fafbfc;
+  --texto: #1c2126;
+  --texto-suave: #33383d;
+  --input-bg: #ffffff;
+  --track: #e2e8f0;
+}
+
+[data-theme="dark"] {
+  --primaria-claro: #2a2410;
+  --cinza: #a39c8a;
+  --borda: #3a3529;
+  --bg: #0f0e0b;
+  --bg-card: #1c1a14;
+  --bg-suave: #221f18;
+  --texto: #f0ede4;
+  --texto-suave: #c9c4b6;
+  --input-bg: #221f18;
+  --track: #3a3529;
 }
 
 * {
@@ -22,7 +44,7 @@
 }
 
 .card-login {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 16px;
   padding: 40px 32px;
   width: 100%;
@@ -43,7 +65,7 @@
 .card-login h1 {
   margin: 0;
   font-size: 20px;
-  color: #1c2126;
+  color: var(--texto);
 }
 
 .card-login .sub {
@@ -59,6 +81,8 @@
   font-size: 15px;
   border: 1px solid #b3c2d1;
   border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--texto);
 }
 
 .card-login button {
@@ -88,8 +112,9 @@
 body {
   margin: 0;
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #f5f6f7;
-  color: #1c2126;
+  background: var(--bg);
+  color: var(--texto);
+  transition: background .15s, color .15s;
 }
 
 .page {
@@ -117,7 +142,7 @@ header.topo p {
 }
 
 .card {
-  background: #fff;
+  background: var(--bg-card);
   border: 1px solid var(--borda);
   border-radius: 10px;
   padding: 22px 24px;
@@ -146,7 +171,7 @@ header.topo p {
 .field label {
   font-size: 13px;
   font-weight: 600;
-  color: #33383d;
+  color: var(--texto-suave);
 }
 
 .field small {
@@ -161,6 +186,8 @@ input, select, textarea {
   font-size: 14px;
   font-family: inherit;
   width: 100%;
+  background: var(--input-bg);
+  color: var(--texto);
 }
 
 textarea {
@@ -176,7 +203,7 @@ textarea {
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 14px;
-  background: #fafbfc;
+  background: var(--bg-suave);
   position: relative;
 }
 
@@ -220,7 +247,7 @@ textarea {
 }
 
 .btn.secondary {
-  background: #fff;
+  background: var(--bg-card);
   color: var(--verde-fia);
   border: 1px solid var(--verde-fia);
 }
@@ -250,11 +277,11 @@ textarea {
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 14px;
-  background: #fafbfc;
+  background: var(--bg-suave);
 }
 
 .item-analise.item-ok {
-  background: #fff;
+  background: var(--bg-card);
   padding: 10px 16px;
   display: flex;
   align-items: center;
@@ -271,7 +298,7 @@ textarea {
 
 .item-analise-resumo {
   font-size: 13px;
-  color: #33383d;
+  color: var(--texto-suave);
   margin: 0 0 12px;
 }
 
@@ -300,7 +327,7 @@ textarea {
 /* ============ Follow-up / Dashboard (portados do app Vite — D10 híbrido) ============ */
 .page-larga { max-width: 1400px; margin: 0 auto; padding: 24px 20px 60px; }
 
-.item { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:18px 20px;
+.item { background:var(--bg-card); border:1px solid var(--borda); border-radius:12px; padding:18px 20px;
   display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
 .item-col { flex-direction:column; align-items:flex-start; }
 .detalhe { display:block; color:var(--cinza); font-size:13px; margin-top:4px; }
@@ -321,10 +348,10 @@ textarea {
 .fu-excluir { position:absolute; top:0; right:0; background:none; border:none; cursor:pointer;
   font-size:16px; padding:4px 8px; border-radius:8px; opacity:.45; transition:opacity .15s, background .15s; }
 .fu-excluir:hover { opacity:1; background:#fee2e2; }
-.fu-progresso { width:100%; height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; }
+.fu-progresso { width:100%; height:8px; background:var(--track); border-radius:4px; overflow:hidden; }
 .fu-barra { height:100%; background:var(--primaria); border-radius:4px; transition:width .3s; }
-.fu-etapa { width:100%; padding:10px 12px; font-size:14px; font-weight:600; color:#1c2126;
-  border:1px solid var(--borda); border-radius:8px; background:#f8fafc; cursor:pointer; }
+.fu-etapa { width:100%; padding:10px 12px; font-size:14px; font-weight:600; color:var(--texto);
+  border:1px solid var(--borda); border-radius:8px; background:var(--bg-suave); cursor:pointer; }
 .fu-badge { font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px; margin-left:8px;
   vertical-align:middle; white-space:nowrap; }
 .fu-badge.auto { background:#dcfce7; color:#166534; }
@@ -334,7 +361,7 @@ textarea {
   border:1px solid var(--borda); border-radius:8px; margin-bottom:10px; }
 
 .dash-kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; }
-.kpi { background:#fff; border:1px solid var(--borda); border-radius:12px; padding:12px 16px;
+.kpi { background:var(--bg-card); border:1px solid var(--borda); border-radius:12px; padding:12px 16px;
   display:flex; flex-direction:column; gap:2px; }
 .kpi-valor { font-size:21px; font-weight:800; color:var(--primaria); }
 .kpi-valor small { font-size:13px; color:var(--cinza); font-weight:600; }
