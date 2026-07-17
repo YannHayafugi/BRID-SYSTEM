@@ -12,10 +12,16 @@ import { useSearchParams } from "next/navigation";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string; cidade?: string; uf?: string }
+interface HistoricoEtapa { etapa: number; nome: string; data_autenticacao: string; alterado_em: string }
 interface Processo {
   id: string; titulo: string; orgao: Orgao | null; data: string; tr_nome: string;
   etapa: number; documentos: { oficio?: { nome: string } }; arquivos: string[];
-  cadastro_tr_id: string | null; proposta_aprovada: boolean;
+  cadastro_tr_id: string | null; proposta_aprovada: boolean; historico_etapas: HistoricoEtapa[];
+}
+function hoje() { return new Date().toISOString().slice(0, 10); }
+function fmtDataCurta(iso: string) {
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
 }
 function fmtData(iso: string) {
   const d = new Date(iso);
@@ -32,6 +38,10 @@ function FollowupConteudo() {
   const [erro, setErro] = useState("");
   const [gerando, setGerando] = useState<string | null>(null);
   const [aprovando, setAprovando] = useState<string | null>(null);
+  // fase manual pendente de confirmação: exige data de autenticação (D21)
+  const [etapaPendente, setEtapaPendente] = useState<{ id: string; etapa: number } | null>(null);
+  const [dataAutenticacao, setDataAutenticacao] = useState(hoje());
+  const [confirmando, setConfirmando] = useState(false);
 
   // formulário "abrir novo processo"
   const [titulo, setTitulo] = useState("");
@@ -119,14 +129,29 @@ function FollowupConteudo() {
     }
   }
 
-  async function mudarEtapa(id: string, etapa: number) {
-    const r = await fetch(`/api/processos/${id}/etapa`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ etapa }),
-    });
-    if (!r.ok) alert((await r.json()).erro || "Erro ao mudar a fase.");
-    carregar();
+  // Abre o passo de confirmação: toda troca de fase manual exige a
+  // data de autenticação (assinatura/validação) antes de ser aplicada.
+  function pedirEtapa(id: string, etapa: number) {
+    setDataAutenticacao(hoje());
+    setEtapaPendente({ id, etapa });
+  }
+
+  async function confirmarEtapa() {
+    if (!etapaPendente) return;
+    if (!dataAutenticacao) { alert("Informe a data de autenticação."); return; }
+    setConfirmando(true);
+    try {
+      const r = await fetch(`/api/processos/${etapaPendente.id}/etapa`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ etapa: etapaPendente.etapa, dataAutenticacao }),
+      });
+      if (!r.ok) { alert((await r.json()).erro || "Erro ao mudar a fase."); return; }
+      setEtapaPendente(null);
+      await carregar();
+    } finally {
+      setConfirmando(false);
+    }
   }
 
   async function enviarTR(id: string, arquivo: File) {
@@ -238,7 +263,10 @@ function FollowupConteudo() {
               <div className="fu-barra" style={{ width: `${pct}%` }} />
             </div>
 
-            <select className="fu-etapa" value={p.etapa} onChange={(e) => mudarEtapa(p.id, Number(e.target.value))}
+            <select className="fu-etapa"
+              value={etapaPendente?.id === p.id ? etapaPendente.etapa : p.etapa}
+              disabled={etapaPendente?.id === p.id}
+              onChange={(e) => pedirEtapa(p.id, Number(e.target.value))}
               title={
                 primeiraManual >= 0 && p.etapa < primeiraManual
                   ? "As fases manuais só se liberam depois que a fase automatizada (TR > Proposta > Ofício) for concluída."
@@ -253,6 +281,32 @@ function FollowupConteudo() {
                 );
               })}
             </select>
+
+            {etapaPendente?.id === p.id && (
+              <div style={{
+                display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+                background: "var(--primaria-claro)", border: "1px solid var(--primaria)",
+                borderRadius: 8, padding: 8, width: "100%",
+              }}>
+                <label className="detalhe" style={{ margin: 0 }}>
+                  📅 Data de autenticação para &quot;{etapas[etapaPendente.etapa]?.nome}&quot;:
+                </label>
+                <input type="date" value={dataAutenticacao} max={hoje()}
+                  onChange={(e) => setDataAutenticacao(e.target.value)} style={{ marginBottom: 0, width: 150 }} />
+                <button type="button" className="btn-azul" disabled={confirmando} onClick={confirmarEtapa}>
+                  {confirmando ? "Confirmando..." : "Confirmar"}
+                </button>
+                <button type="button" className="btn-doc" onClick={() => setEtapaPendente(null)}>Cancelar</button>
+              </div>
+            )}
+
+            {p.historico_etapas?.length > 0 && (
+              <span className="detalhe" style={{ width: "100%" }}
+                title="Última mudança de fase manual autenticada">
+                🔏 Última autenticação: {fmtDataCurta(p.historico_etapas[p.historico_etapas.length - 1].data_autenticacao)}
+                {" — "}{p.historico_etapas[p.historico_etapas.length - 1].nome}
+              </span>
+            )}
 
             <div style={{ width: "100%" }}>
               <span className="detalhe">Documentos essenciais (TR → Proposta → Ofício):</span>

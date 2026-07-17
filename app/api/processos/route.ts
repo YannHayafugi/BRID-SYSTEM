@@ -29,6 +29,7 @@ export async function GET() {
     arquivos: Object.keys(p.arquivos || {}),
     cadastro_tr_id: p.cadastro_tr_id,
     proposta_aprovada: !!p.proposta_aprovada,
+    historico_etapas: p.historico_etapas || [],
   }));
 
   return NextResponse.json({ ok: true, processos, etapas: ETAPAS_FLUXO });
