@@ -1,6 +1,21 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Inter, Montserrat } from "next/font/google";
 import BarraUsuario from "./components/BarraUsuario";
+
+// D25: tipografia da marca Grupo BRID — títulos/nav em Montserrat (bold,
+// geométrica, igual ao site institucional), corpo de texto em Inter.
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--fonte-titulo",
+  display: "swap",
+});
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--fonte-corpo",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Gerador de Propostas — GRUPO BRID",
@@ -27,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
       </head>
-      <body>
+      <body className={`${montserrat.variable} ${inter.variable}`}>
         <BarraUsuario />
         {children}
       </body>

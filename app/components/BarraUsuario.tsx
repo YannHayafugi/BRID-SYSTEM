@@ -76,12 +76,15 @@ export default function BarraUsuario() {
 
   const linkEstilo = (ativo?: boolean): React.CSSProperties => ({
     color: "var(--primaria)",
-    fontWeight: 600,
+    fontFamily: "var(--fonte-titulo)",
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.03em",
     textDecoration: "none",
     background: "none",
     border: "none",
     cursor: "pointer",
-    fontSize: 13,
+    fontSize: 12,
     padding: 0,
   });
 
@@ -115,8 +118,11 @@ export default function BarraUsuario() {
                   style={{
                     padding: "8px 14px",
                     borderRadius: 8,
-                    fontWeight: 600,
-                    fontSize: 14,
+                    fontFamily: "var(--fonte-titulo)",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
                     textDecoration: "none",
                     color: ativa ? "var(--escuro)" : "var(--primaria)",
                     background: ativa ? "var(--primaria)" : "transparent",

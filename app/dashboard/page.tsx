@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BarrasHorizontais, BarrasMensais, Donut } from "@/app/components/DashboardCharts";
+import Modal from "@/app/components/Modal";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string }
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const [carregando, setCarregando] = useState(true);
   const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
   const [faseAberta, setFaseAberta] = useState<number | null>(null);
+  const [notificacoesAbertas, setNotificacoesAbertas] = useState(false);
 
   useEffect(() => {
     fetch("/api/processos").then(async (r) => {
@@ -95,6 +97,9 @@ export default function DashboardPage() {
     if (primeiraManual < 0 || p.etapa < primeiraManual) return [];
     return [{ p, msg: `Fase atual: ${etapas[p.etapa]?.nome || "-"}`, pronto: false }];
   });
+
+  const totalAvisos = avisosAutomacao.length + avisosManual.length;
+  const avisosProntos = avisosAutomacao.filter((a) => a.pronto).length;
 
   // ---- D24: KPIs e gráficos adicionais ----
   const comProposta = processosFiltrados.filter(temProposta);
@@ -196,6 +201,34 @@ export default function DashboardPage() {
         </span>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setNotificacoesAbertas(true)}
+        className="btn-azul"
+        style={{
+          display: "flex", alignItems: "center", gap: 10, marginBottom: 16,
+          background: totalAvisos ? "var(--primaria)" : "var(--bg-card)",
+          border: totalAvisos ? "none" : "1px solid var(--borda)",
+          color: totalAvisos ? "var(--escuro)" : "var(--texto)",
+        }}
+        title="Ver notificações de automação e de fases manuais"
+      >
+        🔔 Notificações
+        {totalAvisos > 0 && (
+          <span style={{
+            background: "var(--escuro)", color: "var(--primaria)", borderRadius: 999,
+            fontSize: 12, fontWeight: 800, padding: "2px 9px",
+          }}>
+            {totalAvisos}
+          </span>
+        )}
+        {avisosProntos > 0 && (
+          <span className="detalhe" style={{ color: totalAvisos ? "var(--escuro)" : undefined }}>
+            {avisosProntos} pronto(s) para gerar Proposta 🤖
+          </span>
+        )}
+      </button>
+
       <div className="dash-kpis">
         <div className="kpi" title="Percentual de processos com os 3 documentos essenciais completos">
           <span className="kpi-valor">{qualidade}%</span>
@@ -260,38 +293,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="dash-colunas">
-        <div className="dash-col">
-          <h3>🔔 Notificações</h3>
-          <div className="dash-scroll">
-            <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "4px 0" }}>🤖 Automação</span>
-            {avisosAutomacao.length ? avisosAutomacao.map((a, i) => (
-              <Link href={`/followup?processo=${a.p.id}`} className={`item notif ${a.pronto ? "pronto" : ""}`} key={i}
-                style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
-                title="Abrir este processo no Follow-up">
-                <div>
-                  <strong>{a.p.titulo}</strong>
-                  <span className="detalhe">{a.msg}</span>
-                  <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
-                </div>
-              </Link>
-            )) : <p className="vazio">✅ Nenhuma pendência de automação.</p>}
-
-            <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "12px 0 4px" }}>✋ Manual</span>
-            {avisosManual.length ? avisosManual.map((a, i) => (
-              <Link href={`/followup?processo=${a.p.id}`} className="item notif" key={i}
-                style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
-                title="Abrir este processo no Follow-up">
-                <div>
-                  <strong>{a.p.titulo}</strong>
-                  <span className="detalhe">{a.msg}</span>
-                  <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
-                </div>
-              </Link>
-            )) : <p className="vazio">✅ Nenhum processo em fase manual.</p>}
-          </div>
-        </div>
-
+      <div className="dash-colunas" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <div className="dash-col">
           <h3>📊 Processos por fase</h3>
           <div className="dash-scroll">
@@ -347,6 +349,36 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {notificacoesAbertas && (
+        <Modal titulo="🔔 Notificações" onFechar={() => setNotificacoesAbertas(false)}>
+          <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "4px 0" }}>🤖 Automação</span>
+          {avisosAutomacao.length ? avisosAutomacao.map((a, i) => (
+            <Link href={`/followup?processo=${a.p.id}`} className={`item notif ${a.pronto ? "pronto" : ""}`} key={i}
+              style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
+              title="Abrir este processo no Follow-up" onClick={() => setNotificacoesAbertas(false)}>
+              <div>
+                <strong>{a.p.titulo}</strong>
+                <span className="detalhe">{a.msg}</span>
+                <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
+              </div>
+            </Link>
+          )) : <p className="vazio">✅ Nenhuma pendência de automação.</p>}
+
+          <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "12px 0 4px" }}>✋ Manual</span>
+          {avisosManual.length ? avisosManual.map((a, i) => (
+            <Link href={`/followup?processo=${a.p.id}`} className="item notif" key={i}
+              style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
+              title="Abrir este processo no Follow-up" onClick={() => setNotificacoesAbertas(false)}>
+              <div>
+                <strong>{a.p.titulo}</strong>
+                <span className="detalhe">{a.msg}</span>
+                <span className="detalhe">Última atualização: {fmtData(a.p.atualizado_em)}</span>
+              </div>
+            </Link>
+          )) : <p className="vazio">✅ Nenhum processo em fase manual.</p>}
+        </Modal>
+      )}
     </div>
   );
 }

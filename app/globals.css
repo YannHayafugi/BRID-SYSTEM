@@ -111,10 +111,18 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--fonte-corpo), -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--texto);
   transition: background .15s, color .15s;
+}
+
+/* D25: tipografia — títulos, botões e navegação usam a fonte de marca (mais
+ * pesada e geométrica), o corpo do texto usa a fonte de leitura. */
+h1, h2, h3, h4,
+.kpi-nome, .btn, .btn-azul, .btn-doc, .btn-dl, .fu-badge, .etapa-badge {
+  font-family: var(--fonte-titulo), -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 700;
 }
 
 .page {
