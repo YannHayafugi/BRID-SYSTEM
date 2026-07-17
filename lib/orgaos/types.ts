@@ -66,6 +66,22 @@ export interface OrgaoComContatos extends Orgao {
   contatos: Contato[];
 }
 
+/** Uma "Ação" no card do órgão = um processo do Follow-up aberto para ele
+ * (D15) — título livre (ex.: "Securitização", "Consultoria Tributária"),
+ * com seus arquivos (TR/Proposta/Ofício) e progresso. */
+export interface AcaoOrgao {
+  id: string;
+  titulo: string;
+  etapa: number;
+  arquivos: string[];
+  documentos: { oficio?: { nome: string } };
+  proposta_aprovada: boolean;
+}
+
+export interface OrgaoComAcoes extends Orgao {
+  processos?: AcaoOrgao[];
+}
+
 /** Payload para cadastrar/editar um órgão. */
 export interface OrgaoInput {
   tipoEnte: TipoEnte;

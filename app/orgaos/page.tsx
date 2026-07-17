@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { NovoContatoInput, Orgao, TipoEnte, UFS_BRASIL } from "@/lib/orgaos/types";
+import { NovoContatoInput, OrgaoComAcoes, TipoEnte, UFS_BRASIL } from "@/lib/orgaos/types";
 import { mascaraCnpj, mascaraTelefone } from "@/lib/mascaras";
+import { ETAPAS_FLUXO } from "@/lib/processos/etapas";
 
 interface FiltrosOrgaos {
   q: string;
@@ -24,7 +25,7 @@ export default function OrgaosPage() {
 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [orgaos, setOrgaos] = useState<Orgao[]>([]);
+  const [orgaos, setOrgaos] = useState<OrgaoComAcoes[]>([]);
 
   const [formAberto, setFormAberto] = useState(false);
   const [tipoEnte, setTipoEnte] = useState<TipoEnte>("Município");
@@ -308,21 +309,68 @@ export default function OrgaosPage() {
 
         {!carregando && orgaos.length === 0 && !erro && <p>Nenhum órgão encontrado.</p>}
 
-        {orgaos.map((o) => (
-          <Link key={o.id} href={`/orgaos/${o.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="item-analise" style={{ cursor: "pointer" }}>
-              <div className="item-analise-cabecalho">
-                <span className="etapa-badge">
-                  {o.razao_social} — {o.cidade}/{o.uf}
+        {orgaos.map((o) => {
+          const acoes = o.processos || [];
+          return (
+            <div key={o.id} className="item-analise">
+              <Link href={`/orgaos/${o.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                <div className="item-analise-cabecalho" style={{ cursor: "pointer" }}>
+                  <span className="etapa-badge">
+                    {o.razao_social} — {o.cidade}/{o.uf}
+                  </span>
+                  <span className="decisao-tag decisao-pendente">{o.tipo_ente}</span>
+                </div>
+                <p className="item-analise-resumo">
+                  CNPJ: {mascaraCnpj(o.cnpj)} — Cadastrado em {new Date(o.created_at).toLocaleString("pt-BR")}
+                </p>
+              </Link>
+
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #e2e8f0" }}>
+                <span className="detalhe" style={{ fontWeight: 600 }}>
+                  Ações ({acoes.length})
                 </span>
-                <span className="decisao-tag decisao-pendente">{o.tipo_ente}</span>
+                {acoes.length === 0 ? (
+                  <p className="detalhe" style={{ margin: "4px 0 0" }}>
+                    Nenhuma ação (processo) aberta para este órgão ainda.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                    {acoes.map((a) => {
+                      const temTR = a.arquivos.includes("tr");
+                      const temProposta = a.arquivos.includes("proposta");
+                      const temOficio = !!a.documentos?.oficio;
+                      const pct = ETAPAS_FLUXO.length
+                        ? Math.round(((a.etapa + 1) / ETAPAS_FLUXO.length) * 100)
+                        : 0;
+                      return (
+                        <div key={a.id} style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                            <strong style={{ fontSize: 13 }}>{a.titulo}</strong>
+                            <span className="detalhe" style={{ fontSize: 12 }}>{pct}%</span>
+                          </div>
+                          <div className="fu-progresso" style={{ margin: "6px 0" }}>
+                            <div className="fu-barra" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
+                            <span className={`detalhe ${temTR ? "" : "pendente"}`}>
+                              {temTR ? "✅ TR" : "⏳ TR"}
+                            </span>
+                            <span className={`detalhe ${temProposta ? "" : "pendente"}`}>
+                              {temProposta ? "✅ Proposta" : "⏳ Proposta"}
+                            </span>
+                            <span className={`detalhe ${temOficio ? "" : "pendente"}`}>
+                              {temOficio ? "✅ Ofício" : a.proposta_aprovada ? "⏳ Ofício" : "🔒 Ofício"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <p className="item-analise-resumo">
-                CNPJ: {mascaraCnpj(o.cnpj)} — Cadastrado em {new Date(o.created_at).toLocaleString("pt-BR")}
-              </p>
             </div>
-          </Link>
-        ))}
+          );
+        })}
       </div>
     </main>
   );

@@ -29,7 +29,12 @@ export async function GET(req: NextRequest) {
   const ate = searchParams.get("ate")?.trim();
 
   const supabase = getSupabaseRouteClient();
-  let query = supabase.from("gp_orgaos").select("*").order("razao_social", { ascending: true });
+  // D15: cada órgão traz suas "Ações" (processos do Follow-up) para o card —
+  // arquivos/documentos/proposta_aprovada alimentam o progresso por ação.
+  let query = supabase
+    .from("gp_orgaos")
+    .select("*, processos:gp_processos(id, titulo, etapa, arquivos, documentos, proposta_aprovada)")
+    .order("razao_social", { ascending: true });
 
   if (q) query = query.ilike("razao_social", `%${q}%`);
   if (tipo) query = query.eq("tipo_ente", tipo);
@@ -39,7 +44,19 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, orgaos: data });
+  const orgaos = (data || []).map((o) => ({
+    ...o,
+    processos: (o.processos || []).map((p: any) => ({
+      id: p.id,
+      titulo: p.titulo,
+      etapa: p.etapa,
+      arquivos: Object.keys(p.arquivos || {}),
+      documentos: p.documentos || {},
+      proposta_aprovada: !!p.proposta_aprovada,
+    })),
+  }));
+
+  return NextResponse.json({ ok: true, orgaos });
 }
 
 /** Cadastra um novo órgão. Tipo do ente, razão social, cidade e UF são
