@@ -2,7 +2,7 @@
 
 /** Conteúdo de "Administração de usuários" — reaproveitado pela página
  * /admin/usuarios e pelo modal aberto a partir do header (D18). */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface Profile {
@@ -29,6 +29,30 @@ export default function AdminUsuariosConteudo() {
   const [novoPodeEditar, setNovoPodeEditar] = useState(false);
   const [novoPodeExcluir, setNovoPodeExcluir] = useState(false);
   const [criando, setCriando] = useState(false);
+
+  // D31: filtros da lista de usuários cadastrados + paginação "ver mais".
+  const [filtroNome, setFiltroNome] = useState("");
+  const [filtroEmail, setFiltroEmail] = useState("");
+  const [filtroPerfil, setFiltroPerfil] = useState("");
+  const [qtdVisivel, setQtdVisivel] = useState(5);
+
+  const usuariosFiltrados = useMemo(() => {
+    const nomeBusca = filtroNome.trim().toLowerCase();
+    const emailBusca = filtroEmail.trim().toLowerCase();
+    return usuarios.filter((u) => {
+      if (nomeBusca && !(u.nome_completo || "").toLowerCase().includes(nomeBusca)) return false;
+      if (emailBusca && !u.email.toLowerCase().includes(emailBusca)) return false;
+      if (filtroPerfil && u.perfil !== filtroPerfil) return false;
+      return true;
+    });
+  }, [usuarios, filtroNome, filtroEmail, filtroPerfil]);
+
+  useEffect(() => {
+    setQtdVisivel(5);
+  }, [filtroNome, filtroEmail, filtroPerfil]);
+
+  const usuariosVisiveis = usuariosFiltrados.slice(0, qtdVisivel);
+  const filtrosAtivos = !!(filtroNome || filtroEmail || filtroPerfil);
 
   async function carregar() {
     setCarregando(true);
@@ -179,8 +203,40 @@ export default function AdminUsuariosConteudo() {
       </section>
 
       <section className="card">
-        <h2>Usuários cadastrados ({usuarios.length})</h2>
-        {usuarios.map((u) => (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <h2>Usuários cadastrados ({usuariosFiltrados.length}{filtrosAtivos ? ` de ${usuarios.length}` : ""})</h2>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", margin: "0 0 16px" }}>
+          <div className="field" style={{ minWidth: 160, marginBottom: 0 }}>
+            <label>Nome</label>
+            <input value={filtroNome} onChange={(e) => setFiltroNome(e.target.value)} placeholder="Buscar por nome" />
+          </div>
+          <div className="field" style={{ minWidth: 160, marginBottom: 0 }}>
+            <label>E-mail</label>
+            <input value={filtroEmail} onChange={(e) => setFiltroEmail(e.target.value)} placeholder="Buscar por e-mail" />
+          </div>
+          <div className="field" style={{ minWidth: 160, marginBottom: 0 }}>
+            <label>Tipo de perfil</label>
+            <select value={filtroPerfil} onChange={(e) => setFiltroPerfil(e.target.value)}>
+              <option value="">Todos</option>
+              <option value="visualizador">Visualizador</option>
+              <option value="editor">Editor</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          {filtrosAtivos && (
+            <button type="button" className="btn-doc" onClick={() => { setFiltroNome(""); setFiltroEmail(""); setFiltroPerfil(""); }}>
+              Limpar filtros
+            </button>
+          )}
+        </div>
+
+        {usuariosFiltrados.length === 0 && (
+          <p className="vazio">Nenhum usuário encontrado com esses filtros.</p>
+        )}
+
+        {usuariosVisiveis.map((u) => (
           <div className="item-analise" key={u.id}>
             <div className="item-analise-cabecalho">
               <span className="etapa-badge">{u.email}</span>
@@ -227,6 +283,14 @@ export default function AdminUsuariosConteudo() {
             </div>
           </div>
         ))}
+
+        {usuariosFiltrados.length > qtdVisivel && (
+          <div className="actions">
+            <button type="button" className="btn secondary" onClick={() => setQtdVisivel((v) => v + 5)}>
+              Ver mais ({usuariosFiltrados.length - qtdVisivel} restante{usuariosFiltrados.length - qtdVisivel === 1 ? "" : "s"})
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
