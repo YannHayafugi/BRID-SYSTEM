@@ -54,6 +54,9 @@ export async function POST(req: NextRequest) {
   if (!titulo) {
     return NextResponse.json({ erro: "Informe o título do processo." }, { status: 400 });
   }
+  if (!orgaoId) {
+    return NextResponse.json({ erro: "Selecione o órgão (cliente) do processo." }, { status: 400 });
+  }
 
   const supabase = getSupabaseRouteClient();
   const documentos: Record<string, unknown> = {};

@@ -163,24 +163,11 @@ export default function FollowupPage() {
       <form className="item item-col form-projeto" onSubmit={abrirProcesso} style={{ marginBottom: 24 }}>
         <strong>Abrir novo processo</strong>
 
-        <select value={oficioId} onChange={(e) => selecionarOficio(e.target.value)}
-          title="Escolher um ofício já gerado — o título se preenche sozinho"
-          style={{ background: "var(--primaria-claro)", borderColor: "var(--primaria)" }}>
-          <option value="">— Selecionar ofício gerado (preenche o título) —</option>
-          {oficios.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.assunto || "Sem assunto"} — {o.destinatario} ({fmtData(o.data)})
-            </option>
-          ))}
-        </select>
-
-        <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required
-          placeholder="Título do processo *" title="Nome do processo no Follow-up" />
-
         <div style={{ display: "flex", gap: 10, width: "100%", alignItems: "center" }}>
-          <select value={orgaoId} onChange={(e) => setOrgaoId(e.target.value)} style={{ flex: 1, marginBottom: 0 }}
-            title="Cliente do processo — órgão do cadastro central (D6)">
-            <option value="">— Cliente / órgão (opcional) —</option>
+          <select value={orgaoId} onChange={(e) => setOrgaoId(e.target.value)} required
+            style={{ flex: 1, marginBottom: 0, background: "var(--primaria-claro)", borderColor: "var(--primaria)" }}
+            title="Cliente do processo — órgão do cadastro central (D6). Obrigatório: define o processo.">
+            <option value="">— Órgão cadastrado (cliente) * —</option>
             {orgaos.map((o) => (
               <option key={o.id} value={o.id}>{o.razao_social} ({o.cidade}/{o.uf})</option>
             ))}
@@ -200,6 +187,19 @@ export default function FollowupPage() {
             <button type="button" className="btn-azul" onClick={cadastrarOrgao}>Salvar órgão</button>
           </div>
         )}
+
+        <select value={oficioId} onChange={(e) => selecionarOficio(e.target.value)}
+          title="Escolher um ofício já gerado — o título se preenche sozinho">
+          <option value="">— Selecionar ofício gerado (preenche o título, opcional) —</option>
+          {oficios.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.assunto || "Sem assunto"} — {o.destinatario} ({fmtData(o.data)})
+            </option>
+          ))}
+        </select>
+
+        <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required
+          placeholder="Título do processo *" title="Nome do processo no Follow-up" />
 
         <div className="downloads">
           <label className="btn-doc" title="Anexar um ofício que não foi gerado pelo sistema">
