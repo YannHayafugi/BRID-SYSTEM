@@ -1,19 +1,25 @@
 "use client";
 
 /** Dashboard — KPIs, notificações de automação, processos por fase e progresso.
- * Portado do app Vite (layout em colunas, sem scroll da página). */
-import { useEffect, useState } from "react";
+ * Portado do app Vite (layout em colunas, sem scroll da página).
+ * D20: filtros por Órgão, Data (período) e Status (fase) do processo. */
+import { useEffect, useMemo, useState } from "react";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
+interface Orgao { id: string; razao_social: string }
 interface Processo {
   id: string; titulo: string; etapa: number; tr_nome: string;
   arquivos: string[]; documentos: { oficio?: unknown };
+  orgao: Orgao | null; data: string;
 }
+
+const FILTROS_VAZIOS = { orgaoId: "", de: "", ate: "", etapa: "" };
 
 export default function DashboardPage() {
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
 
   useEffect(() => {
     fetch("/api/processos").then(async (r) => {
@@ -25,23 +31,46 @@ export default function DashboardPage() {
     }).catch(() => setCarregando(false));
   }, []);
 
-  const total = processos.length;
+  const orgaosDisponiveis = useMemo(() => {
+    const mapa = new Map<string, string>();
+    processos.forEach((p) => { if (p.orgao) mapa.set(p.orgao.id, p.orgao.razao_social); });
+    return Array.from(mapa, ([id, razao_social]) => ({ id, razao_social }))
+      .sort((a, b) => a.razao_social.localeCompare(b.razao_social));
+  }, [processos]);
+
+  const processosFiltrados = useMemo(() => {
+    return processos.filter((p) => {
+      if (filtros.orgaoId && p.orgao?.id !== filtros.orgaoId) return false;
+      if (filtros.etapa !== "" && p.etapa !== Number(filtros.etapa)) return false;
+      if (filtros.de && p.data < `${filtros.de}T00:00:00`) return false;
+      if (filtros.ate && p.data > `${filtros.ate}T23:59:59`) return false;
+      return true;
+    });
+  }, [processos, filtros]);
+
+  function limparFiltros() {
+    setFiltros(FILTROS_VAZIOS);
+  }
+
+  const filtrosAtivos = !!(filtros.orgaoId || filtros.de || filtros.ate || filtros.etapa !== "");
+
+  const total = processosFiltrados.length;
   const nAuto = etapas.filter((e) => e.tipo === "auto").length || 1;
   const temOficio = (p: Processo) => !!p.documentos?.oficio;
   const temTR = (p: Processo) => p.arquivos.includes("tr");
   const temProposta = (p: Processo) => p.arquivos.includes("proposta");
   const completo = (p: Processo) => temOficio(p) && temTR(p) && temProposta(p);
 
-  const qualidade = total ? Math.round((processos.filter(completo).length / total) * 100) : 0;
-  const totalDocs = processos.reduce(
+  const qualidade = total ? Math.round((processosFiltrados.filter(completo).length / total) * 100) : 0;
+  const totalDocs = processosFiltrados.reduce(
     (s, p) => s + Number(temOficio(p)) + Number(temTR(p)) + Number(temProposta(p)) + Number(p.arquivos.includes("resumo")), 0);
   const eficiencia = total
-    ? Math.round((processos.reduce((s, p) => s + Math.min(p.etapa + 1, nAuto) / nAuto, 0) / total) * 100) : 0;
-  const emContrato = processos.filter((p) => p.etapa >= nAuto).length;
-  const concluidos = processos.filter((p) => p.etapa >= etapas.length - 1).length;
+    ? Math.round((processosFiltrados.reduce((s, p) => s + Math.min(p.etapa + 1, nAuto) / nAuto, 0) / total) * 100) : 0;
+  const emContrato = processosFiltrados.filter((p) => p.etapa >= nAuto).length;
+  const concluidos = processosFiltrados.filter((p) => p.etapa >= etapas.length - 1).length;
   const eficacia = total ? Math.round((emContrato / total) * 100) : 0;
 
-  const avisos = processos.flatMap((p) => {
+  const avisos = processosFiltrados.flatMap((p) => {
     if (!temOficio(p)) return [{ p, msg: "sem Ofício de abertura — gere ou anexe pelo Follow-up", pronto: false }];
     if (!temTR(p)) return [{ p, msg: "aguardando envio do TR", pronto: false }];
     if (!temProposta(p)) return [{ p, msg: "TR enviado — pronto para gerar a Proposta 🤖", pronto: true }];
@@ -52,6 +81,41 @@ export default function DashboardPage() {
 
   return (
     <div className="page-larga">
+      <div className="item" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 16 }}>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>Órgão</label>
+          <select value={filtros.orgaoId} onChange={(e) => setFiltros((f) => ({ ...f, orgaoId: e.target.value }))}>
+            <option value="">Todos</option>
+            {orgaosDisponiveis.map((o) => (
+              <option key={o.id} value={o.id}>{o.razao_social}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>De</label>
+          <input type="date" value={filtros.de} onChange={(e) => setFiltros((f) => ({ ...f, de: e.target.value }))} />
+        </div>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>Até</label>
+          <input type="date" value={filtros.ate} onChange={(e) => setFiltros((f) => ({ ...f, ate: e.target.value }))} />
+        </div>
+        <div>
+          <label className="detalhe" style={{ display: "block", marginBottom: 4 }}>Status (fase)</label>
+          <select value={filtros.etapa} onChange={(e) => setFiltros((f) => ({ ...f, etapa: e.target.value }))}>
+            <option value="">Todos</option>
+            {etapas.map((e2, i) => (
+              <option key={i} value={i}>{i + 1}. {e2.nome}</option>
+            ))}
+          </select>
+        </div>
+        {filtrosAtivos && (
+          <button type="button" className="btn-doc" onClick={limparFiltros}>Limpar filtros</button>
+        )}
+        <span className="detalhe" style={{ marginLeft: "auto" }}>
+          {total} de {processos.length} processo(s)
+        </span>
+      </div>
+
       <div className="dash-kpis">
         <div className="kpi" title="Percentual de processos com os 3 documentos essenciais completos">
           <span className="kpi-valor">{qualidade}%</span>
@@ -91,7 +155,7 @@ export default function DashboardPage() {
           <h3>📊 Processos por fase</h3>
           <div className="dash-scroll">
             {etapas.map((e, i) => {
-              const qtd = processos.filter((p) => p.etapa === i).length;
+              const qtd = processosFiltrados.filter((p) => p.etapa === i).length;
               const pct = total ? Math.round((qtd / total) * 100) : 0;
               return (
                 <div className="item fase-linha" key={i} title={`${qtd} processo(s) na fase ${i + 1}`}>
@@ -107,7 +171,7 @@ export default function DashboardPage() {
         <div className="dash-col">
           <h3>📋 Processos e progresso</h3>
           <div className="dash-scroll">
-            {total ? processos.map((p) => {
+            {total ? processosFiltrados.map((p) => {
               const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
               return (
                 <div className="item fase-linha" key={p.id} title={`Fase atual: ${etapas[p.etapa]?.nome || "-"}`}>
@@ -117,7 +181,7 @@ export default function DashboardPage() {
                   <span className="fase-qtd">{pct}%</span>
                 </div>
               );
-            }) : <p className="vazio">Nenhum processo aberto ainda.</p>}
+            }) : <p className="vazio">Nenhum processo encontrado com esses filtros.</p>}
           </div>
         </div>
       </div>
