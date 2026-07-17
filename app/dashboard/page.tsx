@@ -20,6 +20,19 @@ const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "se
 
 const FILTROS_VAZIOS = { orgaoId: "", de: "", ate: "", etapa: "" };
 
+// D30: lista de processos usada nas dicas de ferramenta dos indicadores —
+// mostra o nome dos processos que compõem cada número, não só o total.
+function listaProcessos(lista: Processo[], max = 8): string {
+  if (!lista.length) return "Nenhum processo.";
+  const nomes = lista.map((p) => `• ${p.titulo}`);
+  const mostrados = nomes.slice(0, max).join("\n");
+  const resto = nomes.length > max ? `\n… e mais ${nomes.length - max}` : "";
+  return `${mostrados}${resto}`;
+}
+function dica(descricao: string, lista: Processo[], max = 8): string {
+  return `${descricao}\n\nProcessos:\n${listaProcessos(lista, max)}`;
+}
+
 export default function DashboardPage() {
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
@@ -67,12 +80,14 @@ export default function DashboardPage() {
   const temProposta = (p: Processo) => p.arquivos.includes("proposta");
   const completo = (p: Processo) => temOficio(p) && temTR(p) && temProposta(p);
 
-  const qualidade = total ? Math.round((processosFiltrados.filter(completo).length / total) * 100) : 0;
+  const completosLista = processosFiltrados.filter(completo);
+  const qualidade = total ? Math.round((completosLista.length / total) * 100) : 0;
   const totalDocs = processosFiltrados.reduce(
     (s, p) => s + Number(temOficio(p)) + Number(temTR(p)) + Number(temProposta(p)) + Number(p.arquivos.includes("resumo")), 0);
   const eficiencia = total
     ? Math.round((processosFiltrados.reduce((s, p) => s + Math.min(p.etapa + 1, nAuto) / nAuto, 0) / total) * 100) : 0;
-  const emContrato = processosFiltrados.filter((p) => p.etapa >= nAuto).length;
+  const emContratoLista = processosFiltrados.filter((p) => p.etapa >= nAuto);
+  const emContrato = emContratoLista.length;
   const concluidos = processosFiltrados.filter((p) => p.etapa >= etapas.length - 1).length;
   const eficacia = total ? Math.round((emContrato / total) * 100) : 0;
 
@@ -83,26 +98,30 @@ export default function DashboardPage() {
     : 0;
 
   const agora = Date.now();
-  const estagnados = processosFiltrados.filter((p) => {
+  const estagnadosLista = processosFiltrados.filter((p) => {
     if (etapas.length && p.etapa >= etapas.length - 1) return false; // já concluído
     const diasParado = (agora - new Date(p.atualizado_em).getTime()) / 86400000;
     return diasParado >= DIAS_ESTAGNADO;
-  }).length;
+  });
+  const estagnados = estagnadosLista.length;
 
   const contagemPorOrgao = useMemo(() => {
-    const mapa = new Map<string, { rotulo: string; valor: number }>();
+    const mapa = new Map<string, { rotulo: string; valor: number; processos: Processo[] }>();
     processosFiltrados.forEach((p) => {
       if (!p.orgao) return;
-      const atual = mapa.get(p.orgao.id) || { rotulo: p.orgao.razao_social, valor: 0 };
+      const atual = mapa.get(p.orgao.id) || { rotulo: p.orgao.razao_social, valor: 0, processos: [] as Processo[] };
       atual.valor += 1;
+      atual.processos.push(p);
       mapa.set(p.orgao.id, atual);
     });
     return Array.from(mapa.values()).sort((a, b) => b.valor - a.valor);
   }, [processosFiltrados]);
   const orgaoTop = contagemPorOrgao[0] || null;
 
-  const municipios = processosFiltrados.filter((p) => p.orgao?.tipo_ente === "Município").length;
-  const estados = processosFiltrados.filter((p) => p.orgao?.tipo_ente === "Estado").length;
+  const municipiosLista = processosFiltrados.filter((p) => p.orgao?.tipo_ente === "Município");
+  const estadosLista = processosFiltrados.filter((p) => p.orgao?.tipo_ente === "Estado");
+  const municipios = municipiosLista.length;
+  const estados = estadosLista.length;
   const percMunicipio = total ? Math.round((municipios / total) * 100) : 0;
 
   const funil = useMemo(() => [
@@ -177,42 +196,42 @@ export default function DashboardPage() {
       </div>
 
       <div className="dash-kpis">
-        <div className="kpi" title="Percentual de processos com os 3 documentos essenciais completos">
+        <div className="kpi" title={dica("Percentual de processos com os 3 documentos essenciais completos", completosLista)}>
           <span className="kpi-valor">{qualidade}%</span>
           <span className="kpi-nome">Qualidade</span>
           <span className="kpi-desc">documentação essencial completa</span>
         </div>
-        <div className="kpi" title="Processos abertos e documentos gerados/anexados">
+        <div className="kpi" title={dica("Processos abertos e documentos gerados/anexados", processosFiltrados)}>
           <span className="kpi-valor">{total} <small>proc.</small> · {totalDocs} <small>docs</small></span>
           <span className="kpi-nome">Produtividade</span>
           <span className="kpi-desc">processos e documentos no sistema</span>
         </div>
-        <div className="kpi" title="Quanto das fases automatizadas já foi percorrido, na média">
+        <div className="kpi" title={dica("Quanto das fases automatizadas já foi percorrido, na média", processosFiltrados)}>
           <span className="kpi-valor">{eficiencia}%</span>
           <span className="kpi-nome">Eficiência</span>
           <span className="kpi-desc">aproveitamento da automação</span>
         </div>
-        <div className="kpi" title="Processos que avançaram além da automação (contrato em diante)">
+        <div className="kpi" title={dica("Processos que avançaram além da automação (contrato em diante)", emContratoLista)}>
           <span className="kpi-valor">{eficacia}% <small>({concluidos} concl.)</small></span>
           <span className="kpi-nome">Eficácia</span>
           <span className="kpi-desc">convertidos em contrato</span>
         </div>
-        <div className="kpi" title="Percentual de propostas geradas que já foram aprovadas">
+        <div className="kpi" title={dica("Percentual de propostas geradas que já foram aprovadas", comProposta)}>
           <span className="kpi-valor">{taxaAprovacao}%</span>
           <span className="kpi-nome">Aprovação de Proposta</span>
           <span className="kpi-desc">{comProposta.length ? `${comProposta.filter((p) => p.proposta_aprovada).length} de ${comProposta.length} propostas` : "nenhuma proposta gerada"}</span>
         </div>
-        <div className="kpi" title={`Processos sem atualização há ${DIAS_ESTAGNADO} dias ou mais`}>
+        <div className="kpi" title={dica(`Processos sem atualização há ${DIAS_ESTAGNADO} dias ou mais`, estagnadosLista)}>
           <span className="kpi-valor" style={estagnados ? { color: "#c2410c" } : undefined}>{estagnados}</span>
           <span className="kpi-nome">Estagnados</span>
           <span className="kpi-desc">sem atualização há {DIAS_ESTAGNADO}+ dias</span>
         </div>
-        <div className="kpi" title="Órgão (cliente) com mais processos abertos no período filtrado">
+        <div className="kpi" title={dica("Órgão (cliente) com mais processos abertos no período filtrado", orgaoTop?.processos || [])}>
           <span className="kpi-valor" style={{ fontSize: 15 }}>{orgaoTop ? orgaoTop.rotulo : "-"}</span>
           <span className="kpi-nome">Órgão com mais processos</span>
           <span className="kpi-desc">{orgaoTop ? `${orgaoTop.valor} processo(s)` : "sem processos"}</span>
         </div>
-        <div className="kpi" title="Percentual de processos de órgãos do tipo Município vs Estado">
+        <div className="kpi" title={dica("Percentual de processos de órgãos do tipo Município vs Estado", [...municipiosLista, ...estadosLista])}>
           <span className="kpi-valor">{percMunicipio}% <small>Município</small></span>
           <span className="kpi-nome">Município x Estado</span>
           <span className="kpi-desc">{municipios} Município · {estados} Estado</span>
