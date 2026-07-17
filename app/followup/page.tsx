@@ -10,6 +10,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Modal from "@/app/components/Modal";
+import FormularioOrgao from "@/app/components/FormularioOrgao";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string; cidade?: string; uf?: string }
@@ -50,12 +51,8 @@ function FollowupConteudo() {
   const [titulo, setTitulo] = useState("");
   const [orgaoId, setOrgaoId] = useState("");
   const [abrindo, setAbrindo] = useState(false);
-  // atalho de cadastro de órgão (D13)
-  const [novoOrgao, setNovoOrgao] = useState(false);
-  const [noTipo, setNoTipo] = useState("Município");
-  const [noRazao, setNoRazao] = useState("");
-  const [noCidade, setNoCidade] = useState("");
-  const [noUf, setNoUf] = useState("SP");
+  // D37: cadastro de órgão reaproveita o formulário completo (mesmo de /orgaos), em modal
+  const [modalOrgaoAberto, setModalOrgaoAberto] = useState(false);
 
   // D36: editar título do processo
   const [editandoTitulo, setEditandoTitulo] = useState<string | null>(null);
@@ -96,19 +93,10 @@ function FollowupConteudo() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [processoAlvo, carregando]);
 
-  async function cadastrarOrgao() {
-    if (!noRazao.trim() || !noCidade.trim()) { alert("Preencha razão social e cidade."); return; }
-    const r = await fetch("/api/orgaos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo_ente: noTipo, razao_social: noRazao, cidade: noCidade, uf: noUf, contatos: [] }),
-    });
-    const d = await r.json();
-    if (!r.ok) { alert(d.erro || "Falha ao cadastrar órgão."); return; }
+  async function aoCadastrarOrgao(orgao: { id: string }) {
+    setModalOrgaoAberto(false);
     await carregar();
-    if (d.orgao?.id) setOrgaoId(d.orgao.id);
-    setNovoOrgao(false);
-    setNoRazao(""); setNoCidade("");
+    if (orgao?.id) setOrgaoId(orgao.id);
   }
 
   async function abrirProcesso(e: React.FormEvent) {
@@ -262,21 +250,9 @@ function FollowupConteudo() {
                   <option key={o.id} value={o.id}>{o.razao_social} ({o.cidade}/{o.uf})</option>
                 ))}
               </select>
-              <button type="button" className="btn-doc" onClick={() => setNovoOrgao(!novoOrgao)}
+              <button type="button" className="btn-doc" onClick={() => setModalOrgaoAberto(true)}
                 title="Cadastrar um órgão sem sair desta tela">＋ Novo órgão</button>
             </div>
-
-            {novoOrgao && (
-              <div style={{ display: "flex", gap: 8, width: "100%", flexWrap: "wrap", background: "var(--bg-suave)", padding: 12, borderRadius: 8 }}>
-                <select value={noTipo} onChange={(e) => setNoTipo(e.target.value)} style={{ width: 130, marginBottom: 0 }}>
-                  <option>Município</option><option>Estado</option>
-                </select>
-                <input value={noRazao} onChange={(e) => setNoRazao(e.target.value)} placeholder="Razão social *" style={{ flex: 2, minWidth: 180, marginBottom: 0 }} />
-                <input value={noCidade} onChange={(e) => setNoCidade(e.target.value)} placeholder="Cidade *" style={{ flex: 1, minWidth: 120, marginBottom: 0 }} />
-                <input value={noUf} onChange={(e) => setNoUf(e.target.value.toUpperCase().slice(0, 2))} placeholder="UF" style={{ width: 60, marginBottom: 0 }} />
-                <button type="button" className="btn-azul" onClick={cadastrarOrgao}>Salvar órgão</button>
-              </div>
-            )}
 
             <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required
               placeholder="Título do processo *" title="Nome do processo no Follow-up" />
@@ -286,6 +262,13 @@ function FollowupConteudo() {
               {abrindo ? "Abrindo..." : "Abrir processo"}
             </button>
           </form>
+        </Modal>
+      )}
+
+      {/* D37: cadastro de órgão — mesmo formulário completo usado em /orgaos */}
+      {modalOrgaoAberto && (
+        <Modal titulo="Cadastrar novo órgão" onFechar={() => setModalOrgaoAberto(false)}>
+          <FormularioOrgao onSucesso={aoCadastrarOrgao} onCancelar={() => setModalOrgaoAberto(false)} />
         </Modal>
       )}
 
