@@ -6,8 +6,9 @@
  * fases ✋ são selecionáveis. Cliente = órgão cadastrado (D6/D13), com
  * atalho de cadastro inline. Análise de TR pelo card (D12).
  */
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string; cidade?: string; uf?: string }
@@ -21,7 +22,9 @@ function fmtData(iso: string) {
   return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function FollowupPage() {
+function FollowupConteudo() {
+  const searchParams = useSearchParams();
+  const processoAlvo = searchParams.get("processo");
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
   const [orgaos, setOrgaos] = useState<Orgao[]>([]);
@@ -61,6 +64,13 @@ export default function FollowupPage() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Vindo do Dashboard (?processo=id): rola até o card e destaca por um instante.
+  useEffect(() => {
+    if (!processoAlvo || carregando) return;
+    const el = document.getElementById(`processo-${processoAlvo}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [processoAlvo, carregando]);
 
   async function cadastrarOrgao() {
     if (!noRazao.trim() || !noCidade.trim()) { alert("Preencha razão social e cidade."); return; }
@@ -207,8 +217,10 @@ export default function FollowupPage() {
         // D19: só libera selecionar fases manuais depois que a fase
         // automatizada (TR > Proposta > Ofício) estiver concluída.
         const primeiraManual = etapas.findIndex((e2) => e2.tipo === "manual");
+        const destacado = processoAlvo === p.id;
         return (
-          <div className="item item-col" key={p.id}>
+          <div className="item item-col" key={p.id} id={`processo-${p.id}`}
+            style={destacado ? { outline: "2px solid var(--primaria)", outlineOffset: 2 } : undefined}>
             <div className="fu-topo">
               <button type="button" className="fu-excluir" onClick={() => excluir(p)}
                 title="Excluir este processo e seus arquivos">🗑</button>
@@ -316,5 +328,13 @@ export default function FollowupPage() {
         );
       })}
     </div>
+  );
+}
+
+export default function FollowupPage() {
+  return (
+    <Suspense>
+      <FollowupConteudo />
+    </Suspense>
   );
 }

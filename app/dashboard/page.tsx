@@ -4,6 +4,7 @@
  * Portado do app Vite (layout em colunas, sem scroll da página).
  * D20: filtros por Órgão, Data (período) e Status (fase) do processo. */
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string }
@@ -20,6 +21,7 @@ export default function DashboardPage() {
   const [etapas, setEtapas] = useState<Etapa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
+  const [faseAberta, setFaseAberta] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/processos").then(async (r) => {
@@ -144,9 +146,11 @@ export default function DashboardPage() {
           <h3>🔔 Notificações de automação</h3>
           <div className="dash-scroll">
             {avisos.length ? avisos.map((a, i) => (
-              <div className={`item notif ${a.pronto ? "pronto" : ""}`} key={i}>
+              <Link href={`/followup?processo=${a.p.id}`} className={`item notif ${a.pronto ? "pronto" : ""}`} key={i}
+                style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
+                title="Abrir este processo no Follow-up">
                 <div><strong>{a.p.titulo}</strong><span className="detalhe">{a.msg}</span></div>
-              </div>
+              </Link>
             )) : <p className="vazio">✅ Nenhuma pendência de automação.</p>}
           </div>
         </div>
@@ -155,13 +159,32 @@ export default function DashboardPage() {
           <h3>📊 Processos por fase</h3>
           <div className="dash-scroll">
             {etapas.map((e, i) => {
-              const qtd = processosFiltrados.filter((p) => p.etapa === i).length;
+              const processosFase = processosFiltrados.filter((p) => p.etapa === i);
+              const qtd = processosFase.length;
               const pct = total ? Math.round((qtd / total) * 100) : 0;
+              const aberta = faseAberta === i;
               return (
-                <div className="item fase-linha" key={i} title={`${qtd} processo(s) na fase ${i + 1}`}>
-                  <span className="fase-nome">{i + 1}. {e.nome} {e.tipo === "auto" ? "🤖" : "✋"}</span>
-                  <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
-                  <span className="fase-qtd">{qtd}</span>
+                <div key={i}>
+                  <div className="item fase-linha" style={{ cursor: qtd ? "pointer" : "default" }}
+                    onClick={() => qtd && setFaseAberta(aberta ? null : i)}
+                    title={qtd ? `Clique para ${aberta ? "recolher" : "ver"} os ${qtd} processo(s) desta fase` : `0 processo(s) na fase ${i + 1}`}>
+                    <span className="fase-nome">
+                      {qtd ? (aberta ? "▾ " : "▸ ") : ""}{i + 1}. {e.nome} {e.tipo === "auto" ? "🤖" : "✋"}
+                    </span>
+                    <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
+                    <span className="fase-qtd">{qtd}</span>
+                  </div>
+                  {aberta && (
+                    <div style={{ paddingLeft: 16, borderLeft: "2px solid var(--primaria-claro)", marginBottom: 6 }}>
+                      {processosFase.map((p) => (
+                        <Link key={p.id} href={`/followup?processo=${p.id}`} className="item"
+                          style={{ display: "block", padding: "6px 10px", textDecoration: "none", color: "inherit" }}
+                          title="Abrir este processo no Follow-up">
+                          <strong>{p.titulo}</strong>{p.orgao ? <span className="detalhe"> — {p.orgao.razao_social}</span> : null}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -174,12 +197,14 @@ export default function DashboardPage() {
             {total ? processosFiltrados.map((p) => {
               const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
               return (
-                <div className="item fase-linha" key={p.id} title={`Fase atual: ${etapas[p.etapa]?.nome || "-"}`}>
+                <Link href={`/followup?processo=${p.id}`} className="item fase-linha" key={p.id}
+                  style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
+                  title={`Fase atual: ${etapas[p.etapa]?.nome || "-"} — clique para abrir o processo`}>
                   <span className="fase-nome"><strong>{p.titulo}</strong>
                     <span className="detalhe">{etapas[p.etapa]?.nome || ""}</span></span>
                   <div className="fu-progresso fase-barra"><div className="fu-barra" style={{ width: `${pct}%` }} /></div>
                   <span className="fase-qtd">{pct}%</span>
-                </div>
+                </Link>
               );
             }) : <p className="vazio">Nenhum processo encontrado com esses filtros.</p>}
           </div>
