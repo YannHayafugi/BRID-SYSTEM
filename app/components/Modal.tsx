@@ -5,24 +5,37 @@
  * o botão de fechar. */
 import { useEffect } from "react";
 
+// D38: contador global de modais abertos — com dois modais empilhados
+// (ex.: "Cadastrar órgão" por cima de "Abrir novo processo"), o scroll do
+// body só pode voltar quando o ÚLTIMO deles fechar, senão fechar o de cima
+// destrava o scroll com o de baixo ainda aberto.
+let modaisAbertos = 0;
+
 export default function Modal({
   titulo,
   onFechar,
   children,
+  zIndex = 100,
 }: {
   titulo: string;
   onFechar: () => void;
   children: React.ReactNode;
+  /** D38: permite abrir um modal por cima de outro (ex.: cadastro de órgão
+   * disparado de dentro do modal "Abrir novo processo") sem que os dois
+   * fundos escurecidos se somem de forma confusa. */
+  zIndex?: number;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onFechar();
     }
     document.addEventListener("keydown", onKey);
+    modaisAbertos += 1;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      modaisAbertos = Math.max(0, modaisAbertos - 1);
+      if (modaisAbertos === 0) document.body.style.overflow = "";
     };
   }, [onFechar]);
 
@@ -33,7 +46,7 @@ export default function Modal({
         position: "fixed",
         inset: 0,
         background: "rgba(20, 18, 13, 0.55)",
-        zIndex: 100,
+        zIndex,
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",

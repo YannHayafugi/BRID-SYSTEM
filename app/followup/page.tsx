@@ -235,9 +235,11 @@ function FollowupConteudo() {
         Fluxo de documentos: TR → Proposta → Ofício. O Ofício só é liberado depois que a Proposta é aprovada.
       </p>
 
-      {/* D36: "Abrir novo processo" virou modal, aberto por este botão */}
+      {/* D36/D38: "Abrir novo processo" virou modal, aberto por este botão —
+          sempre abre em branco (novo registro), mesmo se a última vez foi
+          fechado sem salvar. */}
       <button type="button" className="btn-azul" style={{ marginBottom: 20 }}
-        onClick={() => setModalAbrirAberto(true)}>
+        onClick={() => { setTitulo(""); setOrgaoId(""); setModalAbrirAberto(true); }}>
         ＋ Abrir processo
       </button>
 
@@ -268,9 +270,11 @@ function FollowupConteudo() {
         </Modal>
       )}
 
-      {/* D37: cadastro de órgão — mesmo formulário completo usado em /orgaos */}
+      {/* D37/D38: cadastro de órgão — mesmo formulário completo usado em
+          /orgaos, aberto por cima do modal "Abrir novo processo" (zIndex
+          maior, para empilhar corretamente em vez de somar dois fundos). */}
       {modalOrgaoAberto && (
-        <Modal titulo="Cadastrar novo órgão" onFechar={() => setModalOrgaoAberto(false)}>
+        <Modal titulo="Cadastrar novo órgão" onFechar={() => setModalOrgaoAberto(false)} zIndex={200}>
           <FormularioOrgao onSucesso={aoCadastrarOrgao} onCancelar={() => setModalOrgaoAberto(false)} />
         </Modal>
       )}
