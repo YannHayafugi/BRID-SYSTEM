@@ -42,6 +42,12 @@ function AnaliseTRConteudo() {
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [modoLeitura, setModoLeitura] = useState<"texto" | "imagem" | null>(null);
 
+  // D39: ao abrir a análise a partir de um processo do Follow-up, busca o TR
+  // já anexado a ele e dispara a análise automaticamente, sem exigir que o
+  // usuário selecione o arquivo de novo.
+  const [autoBuscando, setAutoBuscando] = useState(false);
+  const [autoErro, setAutoErro] = useState<string | null>(null);
+
   const achados = useMemo(() => (resultado ? gerarAchados(resultado) : []), [resultado]);
   const mensagensOk = useMemo(
     () => (resultado ? itensSemAchados(resultado, achados) : []),
@@ -72,20 +78,14 @@ function AnaliseTRConteudo() {
 
   const contatoExistente = orgao?.contatos[0] || null;
 
-  async function enviarParaAnalise() {
+  async function executarAnalise(arquivoParaAnalisar: File) {
     setErro(null);
-
-    if (!arquivo) {
-      setErro("Selecione o arquivo do TR (PDF) enviado pelo ente.");
-      return;
-    }
-
     setAnalisando(true);
     setResultado(null);
     setEstados({});
     try {
       const formData = new FormData();
-      formData.append("arquivo", arquivo);
+      formData.append("arquivo", arquivoParaAnalisar);
 
       const resp = await fetch("/api/tr/analyze", { method: "POST", body: formData });
       const dados = await resp.json();
@@ -109,6 +109,49 @@ function AnaliseTRConteudo() {
       setAnalisando(false);
     }
   }
+
+  function enviarParaAnalise() {
+    if (!arquivo) {
+      setErro("Selecione o arquivo do TR (PDF) enviado pelo ente.");
+      return;
+    }
+    executarAnalise(arquivo);
+  }
+
+  // D39: veio de um processo do Follow-up — busca o TR já anexado a ele e
+  // já dispara a análise, sem esperar o usuário escolher o arquivo de novo.
+  useEffect(() => {
+    if (!processoId) return;
+    (async () => {
+      setAutoBuscando(true);
+      setAutoErro(null);
+      try {
+        const resp = await fetch(`/api/processos/${processoId}/download/tr`);
+        if (!resp.ok) {
+          setAutoErro("Este processo ainda não tem um TR anexado. Envie o arquivo abaixo para analisar.");
+          return;
+        }
+        const tipo = resp.headers.get("content-type") || "";
+        if (!tipo.includes("pdf")) {
+          setAutoErro(
+            "O TR anexado a este processo não está em PDF, e a análise automática só funciona com PDF. Envie o arquivo em PDF abaixo."
+          );
+          return;
+        }
+        const disposicao = resp.headers.get("content-disposition") || "";
+        const nome = disposicao.match(/filename="?([^"]+)"?/)?.[1] || "TR.pdf";
+        const blob = await resp.blob();
+        const file = new File([blob], nome, { type: tipo });
+        setArquivo(file);
+        await executarAnalise(file);
+      } catch {
+        setAutoErro("Não foi possível carregar o TR do processo automaticamente. Envie o arquivo abaixo.");
+      } finally {
+        setAutoBuscando(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processoId]);
 
   function marcarCiente(id: string, ciente: boolean) {
     setEstados((prev) => ({ ...prev, [id]: { ...prev[id], ciente } }));
@@ -220,6 +263,13 @@ function AnaliseTRConteudo() {
             <strong>{orgao.razao_social}</strong> — {orgao.cidade}/{orgao.uf} ({orgao.tipo_ente})
           </p>
 
+          {autoBuscando && (
+            <p className="msg" style={{ color: "#667085" }}>
+              🔍 Carregando o TR já anexado a este processo e analisando automaticamente...
+            </p>
+          )}
+          {autoErro && !autoBuscando && !resultado && <p className="msg erro">{autoErro}</p>}
+
           <div className="field" style={{ marginTop: 10 }}>
             <label>TR recebido (PDF) *</label>
             <input
@@ -230,7 +280,7 @@ function AnaliseTRConteudo() {
           </div>
 
           <div className="actions">
-            <button className="btn" onClick={enviarParaAnalise} disabled={analisando}>
+            <button className="btn" onClick={enviarParaAnalise} disabled={analisando || autoBuscando}>
               {analisando ? "Analisando (pode levar até 1 minuto)..." : "Analisar TR"}
             </button>
             {erro && <span className="msg erro">{erro}</span>}
