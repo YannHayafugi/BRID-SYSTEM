@@ -278,7 +278,7 @@ export default function FollowupPage() {
                       <input type="file" hidden accept=".pdf,.docx,.txt,.md"
                         onChange={(e) => e.target.files?.[0] && enviarTR(p.id, e.target.files[0])} />
                     </label>
-                    {p.orgao ? (
+                    {p.orgao?.id ? (
                       <Link className="btn-doc" href={`/tr-analise?orgao=${p.orgao.id}&processo=${p.id}`}
                         title="Auditar o TR com IA — os achados ficam vinculados e alimentam a geração da proposta (D8)">
                         🔍 Analisar TR{p.cadastro_tr_id ? " ✓" : ""}
