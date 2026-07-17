@@ -13,6 +13,7 @@ export default function BarraUsuario() {
   const pathname = usePathname();
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  const [nome, setNome] = useState<string | null>(null);
   const [ehAdmin, setEhAdmin] = useState(false);
 
   useEffect(() => {
@@ -24,12 +25,14 @@ export default function BarraUsuario() {
       if (data.user) {
         const { data: perfil } = await supabase
           .from("gp_profiles")
-          .select("perfil")
+          .select("perfil, nome_completo")
           .eq("id", data.user.id)
           .single();
         setEhAdmin(perfil?.perfil === "admin");
+        setNome(perfil?.nome_completo || null);
       } else {
         setEhAdmin(false);
+        setNome(null);
       }
     }
     carregarPerfil();
@@ -113,7 +116,10 @@ export default function BarraUsuario() {
             Administração
           </Link>
         )}
-        <span>{email}</span>
+        <Link href="/perfil" title="Editar nome, e-mail e senha"
+          style={{ color: "#fff", fontWeight: 600, textDecoration: "none" }}>
+          👤 {nome || email}
+        </Link>
         <button
           onClick={sair}
           title="Sair do sistema"
