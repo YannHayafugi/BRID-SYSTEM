@@ -332,7 +332,7 @@ export default function DashboardPage() {
             {total ? processosFiltrados.map((p) => {
               const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
               return (
-                <HoverCard key={p.id} largura={300} posicao="direita"
+                <HoverCard key={p.id} largura={280}
                   conteudo={
                     <div>
                       <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{p.titulo} — fase atual</p>
