@@ -4,7 +4,7 @@ import { updateSession } from "@/lib/supabase/middleware";
 const ROTAS_PUBLICAS = ["/login"];
 
 export async function middleware(request: NextRequest) {
-  const { supabaseResponse, user } = await updateSession(request);
+  const { supabaseResponse, autenticado, contaInativa } = await updateSession(request);
 
   const path = request.nextUrl.pathname;
   const rotaPublica = ROTAS_PUBLICAS.some((r) => path === r || path.startsWith(r + "/"));
@@ -16,14 +16,19 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  if (!user && !rotaPublica) {
+  // Usa "autenticado" (Supabase Auth + gp_profiles.ativo), não só a sessão do
+  // Supabase — senão um usuário logado no Auth mas ainda não ativado neste
+  // app entra em loop: as páginas o deixam passar, as APIs devolvem 401 e
+  // mandam de volta para /login, e o middleware manda de volta pra "/".
+  if (!autenticado && !rotaPublica) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("proximo", path);
+    if (contaInativa) url.searchParams.set("erro", "inativo");
     return NextResponse.redirect(url);
   }
 
-  if (user && path === "/login") {
+  if (autenticado && path === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";

@@ -122,7 +122,15 @@ export default function PerfilConteudo() {
         <form onSubmit={salvarNome}>
           <div className="field">
             <label>Nome completo</label>
-            <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" />
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Seu nome"
+              name="nome_completo"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore
+            />
           </div>
           <div className="actions">
             <button className="btn" type="submit" disabled={salvandoNome}>
@@ -137,7 +145,16 @@ export default function PerfilConteudo() {
         <form onSubmit={salvarEmail}>
           <div className="field">
             <label>E-mail</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              name="email_conta"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore
+            />
           </div>
           <div className="actions">
             <button className="btn" type="submit" disabled={salvandoEmail || email.trim() === emailAtual}>

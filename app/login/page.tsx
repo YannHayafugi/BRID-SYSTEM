@@ -10,7 +10,11 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [entrando, setEntrando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(
+    searchParams.get("erro") === "inativo"
+      ? "Sua conta ainda não foi ativada por um administrador. Fale com quem cuida do sistema."
+      : null
+  );
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
