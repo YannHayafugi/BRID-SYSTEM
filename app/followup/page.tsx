@@ -57,6 +57,7 @@ function FollowupConteudo() {
   // D36: editar título do processo
   const [editandoTitulo, setEditandoTitulo] = useState<string | null>(null);
   const [tituloEditado, setTituloEditado] = useState("");
+  const [orgaoEditado, setOrgaoEditado] = useState("");
   const [salvandoTitulo, setSalvandoTitulo] = useState(false);
 
   // D36: filtros — Órgão, Data (período) e Status (fase)
@@ -122,16 +123,18 @@ function FollowupConteudo() {
   function iniciarEdicaoTitulo(p: Processo) {
     setEditandoTitulo(p.id);
     setTituloEditado(p.titulo);
+    setOrgaoEditado(p.orgao?.id || "");
   }
 
   async function salvarTitulo(id: string) {
     if (!tituloEditado.trim()) { alert("Informe o título do processo."); return; }
+    if (!orgaoEditado) { alert("Selecione o órgão do processo."); return; }
     setSalvandoTitulo(true);
     try {
       const r = await fetch(`/api/processos/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ titulo: tituloEditado }),
+        body: JSON.stringify({ titulo: tituloEditado, orgaoId: orgaoEditado }),
       });
       if (!r.ok) throw new Error((await r.json()).erro || "Falha ao salvar o título.");
       setEditandoTitulo(null);
@@ -330,24 +333,40 @@ function FollowupConteudo() {
           <div className="item item-col" key={p.id} id={`processo-${p.id}`}
             style={destacado ? { outline: "2px solid var(--primaria)", outlineOffset: 2 } : undefined}>
             <div className="fu-topo">
-              <button type="button" className="fu-excluir" onClick={() => excluir(p)}
-                title="Excluir este processo e seus arquivos">🗑</button>
+              <div className="fu-icones">
+                <button type="button" className="fu-icone-btn" onClick={() => iniciarEdicaoTitulo(p)}
+                  title="Editar título e órgão do processo">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </button>
+                <button type="button" className="fu-icone-btn lixeira" onClick={() => excluir(p)}
+                  title="Excluir este processo e seus arquivos">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6" /><path d="M14 11v6" />
+                  </svg>
+                </button>
+              </div>
               {editandoTitulo === p.id ? (
-                <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   <input value={tituloEditado} onChange={(e) => setTituloEditado(e.target.value)}
                     style={{ marginBottom: 0, width: 220 }} autoFocus
                     onKeyDown={(e) => { if (e.key === "Enter") salvarTitulo(p.id); if (e.key === "Escape") setEditandoTitulo(null); }} />
+                  <select value={orgaoEditado} onChange={(e) => setOrgaoEditado(e.target.value)} style={{ marginBottom: 0, width: 200 }}>
+                    <option value="">— Órgão * —</option>
+                    {orgaos.map((o) => (
+                      <option key={o.id} value={o.id}>{o.razao_social} ({o.cidade}/{o.uf})</option>
+                    ))}
+                  </select>
                   <button type="button" className="btn-doc" disabled={salvandoTitulo} onClick={() => salvarTitulo(p.id)}>
                     {salvandoTitulo ? "Salvando..." : "Salvar"}
                   </button>
                   <button type="button" className="btn-doc" onClick={() => setEditandoTitulo(null)}>Cancelar</button>
                 </span>
               ) : (
-                <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <strong>{p.titulo}</strong>
-                  <button type="button" className="fu-excluir" onClick={() => iniciarEdicaoTitulo(p)}
-                    title="Editar título do processo">✏️</button>
-                </span>
+                <strong>{p.titulo}</strong>
               )}
               <span className={`fu-badge ${et.tipo}`}
                 title={et.tipo === "auto" ? "Fase coberta pela automação de documentos" : "Fase conduzida manualmente"}>

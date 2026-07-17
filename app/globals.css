@@ -352,10 +352,13 @@ textarea {
 .btn-doc.pendente { background:#fff7ed; color:#c2410c; border-color:#c2410c; }
 .downloads { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
 
-.fu-topo { position:relative; padding-right:40px; width:100%; }
-.fu-excluir { position:absolute; top:0; right:0; background:none; border:none; cursor:pointer;
-  font-size:16px; padding:4px 8px; border-radius:8px; opacity:.45; transition:opacity .15s, background .15s; }
-.fu-excluir:hover { opacity:1; background:#fee2e2; }
+.fu-topo { position:relative; padding-right:64px; width:100%; }
+.fu-icones { position:absolute; top:0; right:0; display:flex; align-items:center; gap:2px; }
+.fu-icone-btn { background:none; border:none; cursor:pointer; padding:6px; border-radius:8px;
+  color:var(--texto-suave); display:flex; align-items:center; justify-content:center;
+  opacity:.75; transition:opacity .15s, background .15s, color .15s; }
+.fu-icone-btn:hover { opacity:1; background:var(--bg-suave); color:var(--texto); }
+.fu-icone-btn.lixeira:hover { color:#dc2626; background:#fee2e2; }
 .fu-progresso { width:100%; height:8px; background:var(--track); border-radius:4px; overflow:hidden; }
 .fu-barra { height:100%; background:var(--primaria); border-radius:4px; transition:width .3s; }
 .fu-etapa { width:100%; padding:10px 12px; font-size:14px; font-weight:600; color:var(--texto);

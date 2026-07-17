@@ -4,30 +4,33 @@ import { removerArquivos } from "@/lib/processos/arquivos";
 
 export const runtime = "nodejs";
 
-/** Edita o título do processo. */
+/** Edita o título do processo e, opcionalmente, o órgão vinculado a ele. */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const profile = await getProfileAtual();
   if (!profile) {
     return NextResponse.json({ erro: "Sessão expirada. Faça login novamente." }, { status: 401 });
   }
 
-  const { titulo } = (await req.json().catch(() => ({}))) as { titulo?: string };
+  const { titulo, orgaoId } = (await req.json().catch(() => ({}))) as { titulo?: string; orgaoId?: string };
   if (!titulo || !titulo.trim()) {
     return NextResponse.json({ erro: "Informe o título do processo." }, { status: 400 });
+  }
+  if (!orgaoId) {
+    return NextResponse.json({ erro: "Informe o órgão do processo." }, { status: 400 });
   }
 
   const supabase = getSupabaseRouteClient();
   const { data, error } = await supabase
     .from("gp_processos")
-    .update({ titulo: titulo.trim(), updated_at: new Date().toISOString() })
+    .update({ titulo: titulo.trim(), orgao_id: orgaoId, updated_at: new Date().toISOString() })
     .eq("id", params.id)
-    .select("id, titulo")
+    .select("id, titulo, orgao_id")
     .single();
   if (error || !data) {
     return NextResponse.json({ erro: error?.message || "Processo não encontrado." }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true, titulo: data.titulo });
+  return NextResponse.json({ ok: true, titulo: data.titulo, orgaoId: data.orgao_id });
 }
 
 /** Exclui o processo, seus arquivos exclusivos no storage e devolve ao drop

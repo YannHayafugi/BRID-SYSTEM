@@ -146,7 +146,13 @@ export default function AcaoProcessoCard({
       {aberto && (
         <div style={{ padding: "0 12px 14px", borderTop: "1px solid var(--borda)" }}>
           <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 0 2px" }}>
-            <button type="button" className="fu-excluir" onClick={excluir} title="Excluir este processo e seus arquivos">🗑</button>
+            <button type="button" className="fu-icone-btn lixeira" onClick={excluir} title="Excluir este processo e seus arquivos">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6" /><path d="M14 11v6" />
+              </svg>
+            </button>
           </div>
 
           <div style={{ marginBottom: 14 }}>
