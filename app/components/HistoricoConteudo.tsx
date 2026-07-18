@@ -34,11 +34,10 @@ export default function HistoricoConteudo() {
   const [erro, setErro] = useState<string | null>(null);
   const [cadastros, setCadastros] = useState<CadastroResumo[]>([]);
 
-  // D29: processos abertos por este usuário (RLS: não-admin só vê os
-  // próprios; admin vê de todos — e só o admin recebe "criado_por").
+  // D44: processos abertos por este usuário — no Histórico todo mundo
+  // (inclusive admin) vê apenas o que criou.
   const [processos, setProcessos] = useState<ProcessoResumo[]>([]);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
-  const [souAdmin, setSouAdmin] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -51,20 +50,22 @@ export default function HistoricoConteudo() {
           return;
         }
 
+        // D44: no Histórico, cada um vê só o que criou — vale também para
+        // admin, nas duas listas (análises de TR e processos).
         const { data, error } = await supabase
           .from("gp_cadastros_tr")
           .select("id, classificacao, nome_ente, uf, nome_arquivo_tr, status, relatorio_gerado_em, created_at")
+          .eq("criado_por", userData.user.id)
           .order("created_at", { ascending: false });
 
         if (error) throw new Error(error.message);
         setCadastros(data || []);
 
-        const rp = await fetch("/api/processos");
+        const rp = await fetch("/api/processos?meus=1");
         if (rp.ok) {
           const dp = await rp.json();
           setProcessos(dp.processos || []);
           setEtapas(dp.etapas || []);
-          setSouAdmin(!!dp.souAdmin);
         }
       } catch (err: any) {
         setErro(err.message || "Erro ao carregar histórico.");
@@ -80,7 +81,7 @@ export default function HistoricoConteudo() {
       {erro && <p className="msg erro">{erro}</p>}
 
       <h3 style={{ fontSize: 15, margin: "0 0 10px" }}>
-        📋 {souAdmin ? "Processos abertos (todos os usuários)" : "Meus processos abertos"} ({processos.length})
+        📋 Meus processos abertos ({processos.length})
       </h3>
       {!carregando && processos.length === 0 && <p className="vazio" style={{ marginBottom: 20 }}>Nenhum processo aberto ainda.</p>}
       {processos.map((p) => {
@@ -105,7 +106,7 @@ export default function HistoricoConteudo() {
       })}
 
       <h3 style={{ fontSize: 15, margin: "24px 0 10px", borderTop: "1px solid var(--borda)", paddingTop: 16 }}>
-        🔍 Análises de TR ({cadastros.length})
+        🔍 Minhas análises de TR ({cadastros.length})
       </h3>
       {!carregando && cadastros.length === 0 && !erro && <p>Nenhuma análise salva ainda.</p>}
 

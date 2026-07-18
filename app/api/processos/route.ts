@@ -4,12 +4,15 @@ import { ETAPAS_FLUXO } from "@/lib/processos/etapas";
 
 export const runtime = "nodejs";
 
-/** Lista os processos do Follow-up (RLS: usuário vê os próprios; admin vê todos). */
-export async function GET() {
+/** Lista os processos do Follow-up (RLS: usuário vê os próprios; admin vê todos).
+ * D44: com ?meus=1, devolve apenas os criados pelo próprio usuário — vale
+ * para todos, inclusive admin (usado no Histórico). */
+export async function GET(req: NextRequest) {
   const profile = await getProfileAtual();
   if (!profile) {
     return NextResponse.json({ erro: "Sessão expirada. Faça login novamente." }, { status: 401 });
   }
+  const apenasMeus = req.nextUrl.searchParams.get("meus") === "1";
 
   // D29: "criado por" só é exposto para administradores — só neste caso o
   // select embute o criador (RLS já garante que não-admin só vê os próprios
@@ -23,10 +26,12 @@ export async function GET() {
     : "*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf), cadastro_tr:gp_cadastros_tr(status)";
 
   const supabase = getSupabaseRouteClient();
-  const { data, error } = await supabase
+  let consulta = supabase
     .from("gp_processos")
     .select(campos)
     .order("created_at", { ascending: false });
+  if (apenasMeus) consulta = consulta.eq("criado_por", profile.id);
+  const { data, error } = await consulta;
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
   const processos = (data || []).map((p: any) => ({
