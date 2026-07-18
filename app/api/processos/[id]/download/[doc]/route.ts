@@ -35,6 +35,11 @@ export async function GET(
     case "tr":
       caminho = arquivos.tr;
       nome = p.tr_nome || "TR.pdf";
+      // O TR pode ter sido anexado em PDF, DOCX, TXT ou MD (ver EXTS_TR em
+      // app/api/processos/[id]/tr/route.ts) — sem isso o content-type ficava
+      // sempre como octet-stream, quebrando a detecção automática de tipo.
+      if (caminho?.endsWith(".docx")) mime = DOCX_MIME;
+      else if (caminho?.endsWith(".pdf")) mime = "application/pdf";
       break;
     case "proposta":
       caminho = arquivos.proposta;

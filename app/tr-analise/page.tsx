@@ -112,7 +112,7 @@ function AnaliseTRConteudo() {
 
   function enviarParaAnalise() {
     if (!arquivo) {
-      setErro("Selecione o arquivo do TR (PDF) enviado pelo ente.");
+      setErro("Selecione o arquivo do TR (PDF ou DOCX) enviado pelo ente.");
       return;
     }
     executarAnalise(arquivo);
@@ -132,14 +132,15 @@ function AnaliseTRConteudo() {
           return;
         }
         const tipo = resp.headers.get("content-type") || "";
-        if (!tipo.includes("pdf")) {
+        const ehDocx = tipo.includes("wordprocessingml") || tipo.includes("msword");
+        if (!tipo.includes("pdf") && !ehDocx) {
           setAutoErro(
-            "O TR anexado a este processo não está em PDF, e a análise automática só funciona com PDF. Envie o arquivo em PDF abaixo."
+            "O TR anexado a este processo não está em PDF nem DOCX, formatos aceitos pela análise automática. Envie o arquivo abaixo."
           );
           return;
         }
         const disposicao = resp.headers.get("content-disposition") || "";
-        const nome = disposicao.match(/filename="?([^"]+)"?/)?.[1] || "TR.pdf";
+        const nome = disposicao.match(/filename="?([^"]+)"?/)?.[1] || (ehDocx ? "TR.docx" : "TR.pdf");
         const blob = await resp.blob();
         const file = new File([blob], nome, { type: tipo });
         setArquivo(file);
@@ -271,10 +272,10 @@ function AnaliseTRConteudo() {
           {autoErro && !autoBuscando && !resultado && <p className="msg erro">{autoErro}</p>}
 
           <div className="field" style={{ marginTop: 10 }}>
-            <label>TR recebido (PDF) *</label>
+            <label>TR recebido (PDF ou DOCX) *</label>
             <input
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
               onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
             />
           </div>
