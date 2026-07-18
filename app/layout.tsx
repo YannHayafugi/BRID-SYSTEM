@@ -34,6 +34,9 @@ const SCRIPT_TEMA = `(function(){try{
   if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
     document.documentElement.setAttribute("data-theme", "dark");
   }
+  // D45: limpa a chave "senha" gravada pela versão antiga do app (modelo de
+  // senha única) — o login atual (Supabase Auth) nunca salva senha no navegador.
+  localStorage.removeItem("senha");
 } catch (e) {}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
