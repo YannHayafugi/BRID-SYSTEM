@@ -12,6 +12,7 @@ import { useSearchParams } from "next/navigation";
 import Modal from "@/app/components/Modal";
 import FormularioOrgao from "@/app/components/FormularioOrgao";
 import AnaliseTRConteudo from "@/app/components/AnaliseTRConteudo";
+import ProcessoTimeline from "@/app/components/ProcessoTimeline";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string; cidade?: string; uf?: string }
@@ -42,6 +43,9 @@ function FollowupConteudo() {
   const [carregando, setCarregando] = useState(true);
   // D43: só administradores trocam a fase do processo
   const [souAdmin, setSouAdmin] = useState(false);
+  // D47: para não-admin, a fase vira um dropdown que expande a timeline
+  // (somente leitura) do processo
+  const [timelineAberta, setTimelineAberta] = useState<string | null>(null);
   const [erro, setErro] = useState("");
   const [gerando, setGerando] = useState<string | null>(null);
   const [aprovando, setAprovando] = useState<string | null>(null);
@@ -472,10 +476,27 @@ function FollowupConteudo() {
                 ))}
               </select>
             ) : (
-              <div className="fu-etapa" style={{ cursor: "default" }}
-                title="Somente administradores podem trocar a fase do processo">
-                {p.etapa + 1}. {et.nome} {et.tipo === "auto" ? "🤖" : "✋"} 🔒
-              </div>
+              <>
+                {/* D47: dropdown somente leitura — expande a timeline das fases */}
+                <button type="button" className="fu-etapa"
+                  style={{ textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}
+                  onClick={() => setTimelineAberta(timelineAberta === p.id ? null : p.id)}
+                  title="Ver a linha do tempo das fases (somente administradores trocam a fase)">
+                  <span>{p.etapa + 1}. {et.nome} {et.tipo === "auto" ? "🤖" : "✋"} 🔒</span>
+                  <span>{timelineAberta === p.id ? "▾" : "▸"}</span>
+                </button>
+                {timelineAberta === p.id && (
+                  <div style={{ width: "100%", padding: "10px 4px 0" }}>
+                    <ProcessoTimeline
+                      etapas={etapas}
+                      etapaAtual={p.etapa}
+                      historico={p.historico_etapas || []}
+                      bloqueado
+                      onSelecionar={() => {}}
+                    />
+                  </div>
+                )}
+              </>
             )}
 
             {etapaPendente?.id === p.id && (
