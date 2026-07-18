@@ -39,14 +39,18 @@ export default function NotificacoesBotao() {
   const temProposta = (p: Processo) => p.arquivos.includes("proposta");
   const primeiraManual = etapas.findIndex((e) => e.tipo === "manual");
 
-  const avisosAutomacao = processos.flatMap((p) => {
+  // D46: processos finalizados (última fase, 100%) não geram notificação —
+  // não há mais pendência neles.
+  const ativos = processos.filter((p) => !(etapas.length && p.etapa === etapas.length - 1));
+
+  const avisosAutomacao = ativos.flatMap((p) => {
     if (!temOficio(p)) return [{ p, msg: "sem Ofício de abertura — gere ou anexe pelo Follow-up", pronto: false }];
     if (!temTR(p)) return [{ p, msg: "aguardando envio do TR", pronto: false }];
     if (!temProposta(p)) return [{ p, msg: "TR enviado — pronto para gerar a Proposta 🤖", pronto: true }];
     return [];
   });
 
-  const avisosManual = processos.flatMap((p) => {
+  const avisosManual = ativos.flatMap((p) => {
     if (primeiraManual < 0 || p.etapa < primeiraManual) return [];
     return [{ p, msg: `Fase atual: ${etapas[p.etapa]?.nome || "-"}`, pronto: false }];
   });
