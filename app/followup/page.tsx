@@ -41,8 +41,10 @@ function FollowupConteudo() {
   const [etapas, setEtapas] = useState<Etapa[]>([]);
   const [orgaos, setOrgaos] = useState<Orgao[]>([]);
   const [carregando, setCarregando] = useState(true);
-  // D43: só administradores trocam a fase do processo
+  // D43/D48: admin troca para qualquer fase; editor só avança para a
+  // próxima; visualizador não troca
   const [souAdmin, setSouAdmin] = useState(false);
+  const [perfil, setPerfil] = useState<"admin" | "editor" | "visualizador">("visualizador");
   // D47: para não-admin, a fase vira um dropdown que expande a timeline
   // (somente leitura) do processo
   const [timelineAberta, setTimelineAberta] = useState<string | null>(null);
@@ -89,6 +91,7 @@ function FollowupConteudo() {
       setProcessos(dp.processos || []);
       setEtapas(dp.etapas || []);
       setSouAdmin(!!dp.souAdmin);
+      setPerfil(dp.perfil === "admin" || dp.perfil === "editor" ? dp.perfil : "visualizador");
       setOrgaos((await rg.json()).orgaos || []);
     } catch {
       setErro("Falha ao carregar os processos.");
@@ -477,12 +480,14 @@ function FollowupConteudo() {
               </select>
             ) : (
               <>
-                {/* D47: dropdown somente leitura — expande a timeline das fases */}
+                {/* D47: dropdown que expande a timeline das fases */}
                 <button type="button" className="fu-etapa"
                   style={{ textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}
                   onClick={() => setTimelineAberta(timelineAberta === p.id ? null : p.id)}
-                  title="Ver a linha do tempo das fases (somente administradores trocam a fase)">
-                  <span>{p.etapa + 1}. {et.nome} {et.tipo === "auto" ? "🤖" : "✋"} 🔒</span>
+                  title={perfil === "editor"
+                    ? "Ver a linha do tempo das fases — como editor, você pode avançar para a próxima fase"
+                    : "Ver a linha do tempo das fases (somente administradores e editores trocam a fase)"}>
+                  <span>{p.etapa + 1}. {et.nome} {et.tipo === "auto" ? "🤖" : "✋"}{perfil === "editor" ? "" : " 🔒"}</span>
                   <span>{timelineAberta === p.id ? "▾" : "▸"}</span>
                 </button>
                 {timelineAberta === p.id && (
@@ -491,10 +496,19 @@ function FollowupConteudo() {
                       etapas={etapas}
                       etapaAtual={p.etapa}
                       historico={p.historico_etapas || []}
-                      bloqueado
-                      onSelecionar={() => {}}
+                      bloqueado={perfil !== "editor" || etapaPendente?.id === p.id}
+                      apenasProxima={perfil === "editor"}
+                      onSelecionar={(i) => perfil === "editor" && pedirEtapa(p.id, i)}
                     />
                   </div>
+                )}
+                {/* D48: editor avança direto para a próxima fase */}
+                {perfil === "editor" && !finalizado && etapaPendente?.id !== p.id && (
+                  <button type="button" className="btn-doc" style={{ alignSelf: "flex-start" }}
+                    onClick={() => pedirEtapa(p.id, p.etapa + 1)}
+                    title="Avançar este processo para a próxima fase (pede a data de autenticação)">
+                    → Avançar para: {p.etapa + 2}. {etapas[p.etapa + 1]?.nome || ""}
+                  </button>
                 )}
               </>
             )}

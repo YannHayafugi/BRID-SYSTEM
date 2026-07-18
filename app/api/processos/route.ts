@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       : null,
   }));
 
-  return NextResponse.json({ ok: true, processos, etapas: ETAPAS_FLUXO, souAdmin: ehAdmin });
+  return NextResponse.json({ ok: true, processos, etapas: ETAPAS_FLUXO, souAdmin: ehAdmin, perfil: profile.perfil });
 }
 
 /** Abre um processo no Follow-up. Fluxo de documentos é TR > Proposta > Ofício

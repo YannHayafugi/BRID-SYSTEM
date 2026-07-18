@@ -21,6 +21,7 @@ export default function ProcessoTimeline({
   onSelecionar,
   bloqueado,
   livre = false,
+  apenasProxima = false,
 }: {
   etapas: EtapaFluxo[];
   etapaAtual: number;
@@ -29,6 +30,8 @@ export default function ProcessoTimeline({
   bloqueado: boolean;
   /** D43: admin escolhe qualquer fase, sem depender de tipo (manual/auto) nem de ordem */
   livre?: boolean;
+  /** D48: editor só pode avançar para a fase seguinte à atual */
+  apenasProxima?: boolean;
 }) {
   const primeiraManual = etapas.findIndex((e) => e.tipo === "manual");
 
@@ -44,9 +47,11 @@ export default function ProcessoTimeline({
         const atual = i === etapaAtual;
         const futura = i > etapaAtual;
         const bloqueadaPorAutomacaoPendente =
-          !livre && e.tipo === "manual" && primeiraManual >= 0 && etapaAtual < primeiraManual;
+          !livre && !apenasProxima && e.tipo === "manual" && primeiraManual >= 0 && etapaAtual < primeiraManual;
         const clicavel = livre
           ? !bloqueado && !atual
+          : apenasProxima
+          ? !bloqueado && i === etapaAtual + 1
           : e.tipo === "manual" && !bloqueadaPorAutomacaoPendente && !bloqueado && !concluida;
         const data = dataDe(i);
 

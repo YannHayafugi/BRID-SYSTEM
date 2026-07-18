@@ -70,6 +70,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     orgao: { ...orgao, contatos: contatos || [] },
     processos: processosMapeados,
     souAdmin: ehAdmin,
+    perfil: profile.perfil,
   });
 }
 

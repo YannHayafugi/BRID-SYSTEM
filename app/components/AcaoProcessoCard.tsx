@@ -30,12 +30,13 @@ function hoje() { return new Date().toISOString().slice(0, 10); }
 export default function AcaoProcessoCard({
   processo,
   orgaoId,
-  souAdmin,
+  perfil,
   onAtualizado,
 }: {
   processo: AcaoProcesso;
   orgaoId: string;
-  souAdmin: boolean;
+  /** D48: admin troca para qualquer fase; editor só avança; visualizador não troca */
+  perfil: "admin" | "editor" | "visualizador";
   onAtualizado: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -228,15 +229,18 @@ export default function AcaoProcessoCard({
           </div>
 
           <span className="detalhe" style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
-            Linha do tempo das fases:{!souAdmin && " (somente administradores trocam a fase)"}
+            Linha do tempo das fases:
+            {perfil === "editor" && " (você pode avançar para a próxima fase)"}
+            {perfil === "visualizador" && " (somente administradores e editores trocam a fase)"}
           </span>
           <ProcessoTimeline
             etapas={ETAPAS_FLUXO}
             etapaAtual={p.etapa}
             historico={p.historico_etapas}
-            bloqueado={etapaPendente !== null || !souAdmin}
-            livre={souAdmin}
-            onSelecionar={souAdmin ? pedirEtapa : () => {}}
+            bloqueado={etapaPendente !== null || perfil === "visualizador"}
+            livre={perfil === "admin"}
+            apenasProxima={perfil === "editor"}
+            onSelecionar={perfil === "visualizador" ? () => {} : pedirEtapa}
           />
 
           {etapaPendente !== null && (

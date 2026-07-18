@@ -4,16 +4,17 @@ import { ETAPAS_FLUXO } from "@/lib/processos/etapas";
 
 export const runtime = "nodejs";
 
-/** Muda a fase do processo. D43: restrito a administradores — e, para eles,
- * sem restrição de tipo (manual/automática) nem de ordem. */
+/** Muda a fase do processo. D43/D48: admin escolhe qualquer fase, sem
+ * restrição de tipo (manual/automática) nem de ordem; editor só pode avançar
+ * para a próxima fase; visualizador não troca. */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const profile = await getProfileAtual();
   if (!profile) {
     return NextResponse.json({ erro: "Sessão expirada. Faça login novamente." }, { status: 401 });
   }
-  if (profile.perfil !== "admin") {
+  if (profile.perfil !== "admin" && profile.perfil !== "editor") {
     return NextResponse.json(
-      { erro: "Apenas administradores podem trocar a fase do processo." },
+      { erro: "Apenas administradores e editores podem trocar a fase do processo." },
       { status: 403 }
     );
   }
@@ -44,6 +45,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .single();
   if (erroBusca || !processoAtual) {
     return NextResponse.json({ erro: "Processo não encontrado." }, { status: 404 });
+  }
+  // D48: editor só avança para a fase seguinte à atual.
+  if (profile.perfil === "editor" && etapa !== processoAtual.etapa + 1) {
+    return NextResponse.json(
+      { erro: "Editores só podem avançar o processo para a próxima fase." },
+      { status: 403 }
+    );
   }
 
   const historico = Array.isArray(processoAtual.historico_etapas) ? processoAtual.historico_etapas : [];
