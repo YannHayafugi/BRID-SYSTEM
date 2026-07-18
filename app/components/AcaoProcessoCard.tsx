@@ -19,6 +19,7 @@ export interface AcaoProcesso {
   documentos: { oficio?: { nome: string } };
   arquivos: string[];
   cadastro_tr_id: string | null;
+  cadastro_tr_status: "em_analise" | "concluida" | null;
   proposta_aprovada: boolean;
   historico_etapas: HistoricoEtapaTL[];
   criado_por: { id: string | null; nome: string } | null;
@@ -170,9 +171,17 @@ export default function AcaoProcessoCard({
                     <input type="file" hidden accept=".pdf,.docx,.txt,.md" disabled={enviando}
                       onChange={(e) => e.target.files?.[0] && enviarTR(e.target.files[0])} />
                   </label>
-                  <button type="button" className="btn-doc" onClick={() => setModalAnaliseTr(true)}
-                    title="Auditar o TR com IA">
-                    🔍 Analisar TR{p.cadastro_tr_id ? " ✓" : ""}
+                  <button type="button"
+                    className={p.cadastro_tr_status === "em_analise" ? "btn-doc destaque" : "btn-doc"}
+                    onClick={() => setModalAnaliseTr(true)}
+                    title={
+                      p.cadastro_tr_status === "em_analise"
+                        ? "A IA já analisou este TR — falta revisar e gerar o relatório final"
+                        : "Auditar o TR com IA"
+                    }>
+                    {p.cadastro_tr_status === "em_analise"
+                      ? "📝 Pré-análise pronta"
+                      : `🔍 Analisar TR${p.cadastro_tr_status === "concluida" ? " ✓" : ""}`}
                   </button>
                 </>
               ) : (

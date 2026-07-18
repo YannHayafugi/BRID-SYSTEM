@@ -34,9 +34,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // Processos (Ações) deste órgão — usados na timeline de fases da página de
   // detalhe. D29: "criado por" só é embutido para administradores.
   const ehAdmin = profile.perfil === "admin";
+  // D41: também traz o status da análise de TR vinculada (em_analise =
+  // rascunho pronto para revisar, concluida = relatório já gerado).
   const campos = ehAdmin
-    ? "id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at, criador:gp_profiles!gp_processos_criado_por_fkey(id, nome_completo, email)"
-    : "id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at";
+    ? "id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at, criador:gp_profiles!gp_processos_criado_por_fkey(id, nome_completo, email), cadastro_tr:gp_cadastros_tr(status)"
+    : "id, titulo, etapa, arquivos, documentos, proposta_aprovada, historico_etapas, cadastro_tr_id, created_at, cadastro_tr:gp_cadastros_tr(status)";
 
   const { data: processos, error: erroProcessos } = await supabase
     .from("gp_processos")
@@ -55,6 +57,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     documentos: p.documentos || {},
     arquivos: Object.keys(p.arquivos || {}),
     cadastro_tr_id: p.cadastro_tr_id,
+    cadastro_tr_status: p.cadastro_tr?.status || null,
     proposta_aprovada: !!p.proposta_aprovada,
     historico_etapas: p.historico_etapas || [],
     criado_por: ehAdmin

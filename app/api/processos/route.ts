@@ -15,9 +15,12 @@ export async function GET() {
   // select embute o criador (RLS já garante que não-admin só vê os próprios
   // processos, então mostrar quem criou seria redundante para eles).
   const ehAdmin = profile.perfil === "admin";
+  // D41: também traz o status da análise de TR vinculada (em_analise =
+  // rascunho pronto para revisar, concluida = relatório já gerado), para o
+  // botão "Analisar TR" distinguir os dois estados.
   const campos = ehAdmin
-    ? "*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf), criador:gp_profiles!gp_processos_criado_por_fkey(id, nome_completo, email)"
-    : "*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf)";
+    ? "*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf), criador:gp_profiles!gp_processos_criado_por_fkey(id, nome_completo, email), cadastro_tr:gp_cadastros_tr(status)"
+    : "*, orgao:gp_orgaos(id, razao_social, tipo_ente, cidade, uf), cadastro_tr:gp_cadastros_tr(status)";
 
   const supabase = getSupabaseRouteClient();
   const { data, error } = await supabase
@@ -37,6 +40,7 @@ export async function GET() {
     documentos: p.documentos || {},
     arquivos: Object.keys(p.arquivos || {}),
     cadastro_tr_id: p.cadastro_tr_id,
+    cadastro_tr_status: p.cadastro_tr?.status || null,
     proposta_aprovada: !!p.proposta_aprovada,
     historico_etapas: p.historico_etapas || [],
     criado_por: ehAdmin

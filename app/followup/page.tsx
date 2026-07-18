@@ -19,7 +19,8 @@ interface HistoricoEtapa { etapa: number; nome: string; data_autenticacao: strin
 interface Processo {
   id: string; titulo: string; orgao: Orgao | null; data: string; tr_nome: string;
   etapa: number; documentos: { oficio?: { nome: string } }; arquivos: string[];
-  cadastro_tr_id: string | null; proposta_aprovada: boolean; historico_etapas: HistoricoEtapa[];
+  cadastro_tr_id: string | null; cadastro_tr_status: "em_analise" | "concluida" | null;
+  proposta_aprovada: boolean; historico_etapas: HistoricoEtapa[];
   criado_por: { id: string; nome: string } | null;
 }
 function hoje() { return new Date().toISOString().slice(0, 10); }
@@ -461,10 +462,17 @@ function FollowupConteudo() {
                         onChange={(e) => e.target.files?.[0] && enviarTR(p.id, e.target.files[0])} />
                     </label>
                     {p.orgao?.id ? (
-                      <button type="button" className="btn-doc"
+                      <button type="button"
+                        className={p.cadastro_tr_status === "em_analise" ? "btn-doc destaque" : "btn-doc"}
                         onClick={() => setModalAnaliseTr({ processoId: p.id, orgaoId: p.orgao!.id })}
-                        title="Auditar o TR com IA — os achados ficam vinculados e alimentam a geração da proposta (D8)">
-                        🔍 Analisar TR{p.cadastro_tr_id ? " ✓" : ""}
+                        title={
+                          p.cadastro_tr_status === "em_analise"
+                            ? "A IA já analisou este TR — falta revisar e gerar o relatório final"
+                            : "Auditar o TR com IA — os achados ficam vinculados e alimentam a geração da proposta (D8)"
+                        }>
+                        {p.cadastro_tr_status === "em_analise"
+                          ? "📝 Pré-análise pronta"
+                          : `🔍 Analisar TR${p.cadastro_tr_status === "concluida" ? " ✓" : ""}`}
                       </button>
                     ) : (
                       <span className="btn-doc pendente" title="Defina o órgão (cliente) do processo para analisar o TR">
