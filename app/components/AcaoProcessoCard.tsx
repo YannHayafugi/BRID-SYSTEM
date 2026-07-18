@@ -30,10 +30,12 @@ function hoje() { return new Date().toISOString().slice(0, 10); }
 export default function AcaoProcessoCard({
   processo,
   orgaoId,
+  souAdmin,
   onAtualizado,
 }: {
   processo: AcaoProcesso;
   orgaoId: string;
+  souAdmin: boolean;
   onAtualizado: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -131,6 +133,9 @@ export default function AcaoProcessoCard({
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <strong style={{ fontSize: 13 }}>{aberto ? "▾" : "▸"} {p.titulo}</strong>
+          {ETAPAS_FLUXO.length > 0 && p.etapa === ETAPAS_FLUXO.length - 1 && (
+            <span className="fu-badge finalizado" title="Processo concluiu todas as fases do fluxo (100%)">✅ Finalizado</span>
+          )}
           {p.criado_por && (
             <span className="detalhe">criado por {p.criado_por.nome}</span>
           )}
@@ -222,13 +227,16 @@ export default function AcaoProcessoCard({
             </div>
           </div>
 
-          <span className="detalhe" style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Linha do tempo das fases:</span>
+          <span className="detalhe" style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
+            Linha do tempo das fases:{!souAdmin && " (somente administradores trocam a fase)"}
+          </span>
           <ProcessoTimeline
             etapas={ETAPAS_FLUXO}
             etapaAtual={p.etapa}
             historico={p.historico_etapas}
-            bloqueado={etapaPendente !== null}
-            onSelecionar={pedirEtapa}
+            bloqueado={etapaPendente !== null || !souAdmin}
+            livre={souAdmin}
+            onSelecionar={souAdmin ? pedirEtapa : () => {}}
           />
 
           {etapaPendente !== null && (

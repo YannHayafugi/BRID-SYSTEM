@@ -18,6 +18,8 @@ export default function OrgaoDetalhePage() {
   const [erro, setErro] = useState<string | null>(null);
   const [orgao, setOrgao] = useState<OrgaoComContatos | null>(null);
   const [processos, setProcessos] = useState<AcaoProcesso[]>([]);
+  // D43: só administradores trocam a fase do processo
+  const [souAdmin, setSouAdmin] = useState(false);
 
   const [editando, setEditando] = useState(false);
   const [tipoEnte, setTipoEnte] = useState<TipoEnte>("Município");
@@ -41,6 +43,7 @@ export default function OrgaoDetalhePage() {
       if (!resp.ok || !dados.ok) throw new Error(dados.erro || "Falha ao carregar o órgão.");
       setOrgao(dados.orgao);
       setProcessos(dados.processos || []);
+      setSouAdmin(!!dados.souAdmin);
       setTipoEnte(dados.orgao.tipo_ente);
       setRazaoSocial(dados.orgao.razao_social);
       setCnpj(mascaraCnpj(dados.orgao.cnpj || ""));
@@ -304,7 +307,7 @@ export default function OrgaoDetalhePage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
               {processos.map((p) => (
-                <AcaoProcessoCard key={p.id} processo={p} orgaoId={orgao.id} onAtualizado={carregar} />
+                <AcaoProcessoCard key={p.id} processo={p} orgaoId={orgao.id} souAdmin={souAdmin} onAtualizado={carregar} />
               ))}
             </div>
           )}

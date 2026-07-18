@@ -40,6 +40,8 @@ function FollowupConteudo() {
   const [etapas, setEtapas] = useState<Etapa[]>([]);
   const [orgaos, setOrgaos] = useState<Orgao[]>([]);
   const [carregando, setCarregando] = useState(true);
+  // D43: só administradores trocam a fase do processo
+  const [souAdmin, setSouAdmin] = useState(false);
   const [erro, setErro] = useState("");
   const [gerando, setGerando] = useState<string | null>(null);
   const [aprovando, setAprovando] = useState<string | null>(null);
@@ -82,6 +84,7 @@ function FollowupConteudo() {
       const dp = await rp.json();
       setProcessos(dp.processos || []);
       setEtapas(dp.etapas || []);
+      setSouAdmin(!!dp.souAdmin);
       setOrgaos((await rg.json()).orgaos || []);
     } catch {
       setErro("Falha ao carregar os processos.");
@@ -221,6 +224,22 @@ function FollowupConteudo() {
     });
   }, [processos, filtroOrgao, filtroDe, filtroAte, filtroEtapa]);
 
+  // D43: finalizado = última fase do fluxo (100%). Ganha tag própria e vai
+  // para a seção "Finalizados", separada dos processos em andamento.
+  const ehFinalizado = useCallback(
+    (p: Processo) => etapas.length > 0 && p.etapa === etapas.length - 1,
+    [etapas]
+  );
+  const processosAndamento = useMemo(
+    () => processosFiltrados.filter((p) => !ehFinalizado(p)),
+    [processosFiltrados, ehFinalizado]
+  );
+  const processosFinalizados = useMemo(
+    () => processosFiltrados.filter(ehFinalizado),
+    [processosFiltrados, ehFinalizado]
+  );
+  const totalFinalizados = useMemo(() => processos.filter(ehFinalizado).length, [processos, ehFinalizado]);
+
   const filtrosAtivos = !!(filtroOrgao || filtroDe || filtroAte || filtroEtapa !== "");
   function limparFiltros() {
     setFiltroOrgao(""); setFiltroDe(""); setFiltroAte(""); setFiltroEtapa("");
@@ -247,6 +266,22 @@ function FollowupConteudo() {
         onClick={() => { setTitulo(""); setOrgaoId(""); setModalAbrirAberto(true); }}>
         ＋ Abrir processo
       </button>
+
+      {/* D43: cards-resumo no topo — visão rápida antes do filtro */}
+      <div className="fu-resumo">
+        <div className="fu-resumo-card" title="Processos que ainda não chegaram à última fase">
+          <span className="fu-resumo-num">{processos.length - totalFinalizados}</span>
+          <span className="detalhe">⏳ Em andamento</span>
+        </div>
+        <div className="fu-resumo-card" title="Processos na última fase do fluxo (100%)">
+          <span className="fu-resumo-num">{totalFinalizados}</span>
+          <span className="detalhe">✅ Finalizados</span>
+        </div>
+        <div className="fu-resumo-card" title="Todos os processos abertos no Follow-up">
+          <span className="fu-resumo-num">{processos.length}</span>
+          <span className="detalhe">📋 Total</span>
+        </div>
+      </div>
 
       {modalAbrirAberto && (
         <Modal titulo="Abrir novo processo" onFechar={() => setModalAbrirAberto(false)}>
@@ -341,17 +376,28 @@ function FollowupConteudo() {
         <p className="vazio">Nenhum processo encontrado com esses filtros.</p>
       )}
 
-      {processosFiltrados.map((p) => {
-        const et = etapas[p.etapa] || { nome: "-", tipo: "manual" };
-        const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
-        const temTR = p.arquivos.includes("tr");
-        const temProposta = p.arquivos.includes("proposta");
-        const temOficio = !!p.documentos?.oficio;
-        // D19: só libera selecionar fases manuais depois que a fase
-        // automatizada (TR > Proposta > Ofício) estiver concluída.
-        const primeiraManual = etapas.findIndex((e2) => e2.tipo === "manual");
-        const destacado = processoAlvo === p.id;
-        return (
+      {/* D43: em andamento em cima; finalizados em seção própria abaixo */}
+      {processosAndamento.map(renderProcesso)}
+
+      {processosFinalizados.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <h2 style={{ fontSize: 17, margin: "0 0 4px" }}>✅ Finalizados ({processosFinalizados.length})</h2>
+          <p className="detalhe" style={{ marginBottom: 12 }}>Processos que concluíram todas as fases do fluxo.</p>
+          {processosFinalizados.map(renderProcesso)}
+        </div>
+      )}
+    </div>
+  );
+
+  function renderProcesso(p: Processo) {
+    const et = etapas[p.etapa] || { nome: "-", tipo: "manual" };
+    const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
+    const temTR = p.arquivos.includes("tr");
+    const temProposta = p.arquivos.includes("proposta");
+    const temOficio = !!p.documentos?.oficio;
+    const finalizado = ehFinalizado(p);
+    const destacado = processoAlvo === p.id;
+    return (
           <div className="item item-col" key={p.id} id={`processo-${p.id}`}
             style={destacado ? { outline: "2px solid var(--primaria)", outlineOffset: 2 } : undefined}>
             <div className="fu-topo">
@@ -390,10 +436,16 @@ function FollowupConteudo() {
               ) : (
                 <strong>{p.titulo}</strong>
               )}
-              <span className={`fu-badge ${et.tipo}`}
-                title={et.tipo === "auto" ? "Fase coberta pela automação de documentos" : "Fase conduzida manualmente"}>
-                {et.tipo === "auto" ? "🤖 Automatizada" : "✋ Manual"}
-              </span>
+              {finalizado ? (
+                <span className="fu-badge finalizado" title="Processo concluiu todas as fases do fluxo (100%)">
+                  ✅ Finalizado
+                </span>
+              ) : (
+                <span className={`fu-badge ${et.tipo}`}
+                  title={et.tipo === "auto" ? "Fase coberta pela automação de documentos" : "Fase conduzida manualmente"}>
+                  {et.tipo === "auto" ? "🤖 Automatizada" : "✋ Manual"}
+                </span>
+              )}
               <span className="detalhe">
                 {p.orgao ? `${p.orgao.razao_social} — ` : ""}{fmtData(p.data)}
                 {p.criado_por ? ` — criado por ${p.criado_por.nome}` : ""}
@@ -404,24 +456,27 @@ function FollowupConteudo() {
               <div className="fu-barra" style={{ width: `${pct}%` }} />
             </div>
 
-            <select className="fu-etapa"
-              value={etapaPendente?.id === p.id ? etapaPendente.etapa : p.etapa}
-              disabled={etapaPendente?.id === p.id}
-              onChange={(e) => pedirEtapa(p.id, Number(e.target.value))}
-              title={
-                primeiraManual >= 0 && p.etapa < primeiraManual
-                  ? "As fases manuais só se liberam depois que a fase automatizada (TR > Proposta > Ofício) for concluída."
-                  : "Fases 🤖 avançam sozinhas conforme os documentos; selecione apenas as fases manuais ✋"
-              }>
-              {etapas.map((e2, i) => {
-                const bloqueadaPorAutomacaoPendente = e2.tipo === "manual" && primeiraManual >= 0 && p.etapa < primeiraManual;
-                return (
-                  <option key={i} value={i} disabled={e2.tipo === "auto" || bloqueadaPorAutomacaoPendente}>
-                    {i + 1}. {e2.nome} {e2.tipo === "auto" ? "🤖 (automática)" : bloqueadaPorAutomacaoPendente ? "🔒 (conclua a automação)" : "✋"}
+            {/* D43: trocar fase é exclusivo do admin — e para ele o seletor é
+                livre (qualquer fase, sem depender de tipo ou ordem). Usuário
+                comum vê a fase atual como texto. */}
+            {souAdmin ? (
+              <select className="fu-etapa"
+                value={etapaPendente?.id === p.id ? etapaPendente.etapa : p.etapa}
+                disabled={etapaPendente?.id === p.id}
+                onChange={(e) => pedirEtapa(p.id, Number(e.target.value))}
+                title="Selecione qualquer fase — a mudança pede a data de autenticação">
+                {etapas.map((e2, i) => (
+                  <option key={i} value={i}>
+                    {i + 1}. {e2.nome} {e2.tipo === "auto" ? "🤖" : "✋"}
                   </option>
-                );
-              })}
-            </select>
+                ))}
+              </select>
+            ) : (
+              <div className="fu-etapa" style={{ cursor: "default" }}
+                title="Somente administradores podem trocar a fase do processo">
+                {p.etapa + 1}. {et.nome} {et.tipo === "auto" ? "🤖" : "✋"} 🔒
+              </div>
+            )}
 
             {etapaPendente?.id === p.id && (
               <div style={{
@@ -529,9 +584,7 @@ function FollowupConteudo() {
             </div>
           </div>
         );
-      })}
-    </div>
-  );
+  }
 }
 
 export default function FollowupPage() {
