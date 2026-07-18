@@ -159,6 +159,16 @@ export default function DashboardPage() {
 
   const rankingOrgaos = contagemPorOrgao.slice(0, 10);
 
+  // D42: processos finalizados (última fase do fluxo) somem das duas listas
+  // abaixo ("Processos por fase" e "Processos e progresso") — já concluíram
+  // o acompanhamento. KPIs e gráficos continuam contando todos, para manter
+  // as métricas históricas.
+  const processosAtivos = useMemo(
+    () => (etapas.length ? processosFiltrados.filter((p) => p.etapa < etapas.length - 1) : processosFiltrados),
+    [processosFiltrados, etapas]
+  );
+  const totalAtivos = processosAtivos.length;
+
   const faseAutoManual = useMemo(() => {
     const auto = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "auto");
     const manual = processosFiltrados.filter((p) => etapas[p.etapa]?.tipo === "manual");
@@ -291,11 +301,12 @@ export default function DashboardPage() {
       <div className="dash-colunas" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <div className="dash-col">
           <h3>📊 Processos por fase</h3>
+          <p className="detalhe" style={{ margin: "-4px 0 8px" }}>Processos finalizados (última fase) não aparecem aqui.</p>
           <div className="dash-scroll">
             {etapas.map((e, i) => {
-              const processosFase = processosFiltrados.filter((p) => p.etapa === i);
+              const processosFase = processosAtivos.filter((p) => p.etapa === i);
               const qtd = processosFase.length;
-              const pct = total ? Math.round((qtd / total) * 100) : 0;
+              const pct = totalAtivos ? Math.round((qtd / totalAtivos) * 100) : 0;
               const aberta = faseAberta === i;
               return (
                 <div key={i}>
@@ -327,8 +338,9 @@ export default function DashboardPage() {
 
         <div className="dash-col">
           <h3>📋 Processos e progresso</h3>
+          <p className="detalhe" style={{ margin: "-4px 0 8px" }}>Processos finalizados (última fase) não aparecem aqui.</p>
           <div className="dash-scroll">
-            {total ? processosFiltrados.map((p) => {
+            {totalAtivos ? processosAtivos.map((p) => {
               const pct = etapas.length ? Math.round(((p.etapa + 1) / etapas.length) * 100) : 0;
               return (
                 <HoverCard key={p.id} largura={280}
