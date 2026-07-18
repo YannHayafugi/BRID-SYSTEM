@@ -23,6 +23,9 @@ interface ReportRequestBody {
    * do processo — o cadastro salvo é vinculado a ele (cadastro_tr_id) e os
    * achados passam a alimentar a geração da proposta (D8). */
   processoId?: string;
+  /** D40: quando a análise já tinha um rascunho salvo (ver /api/tr/rascunho),
+   * o id dele — finaliza (UPDATE, vira "concluida") em vez de duplicar. */
+  cadastroId?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -125,29 +128,50 @@ export async function POST(req: NextRequest) {
 
     // Salva o cadastro e os achados no histórico antes de gerar o PDF — a
     // mesma validação de pendências acima também condiciona o salvamento.
-    const { data: cadastro, error: erroCadastro } = await supabase
-      .from("gp_cadastros_tr")
-      .insert({
-        criado_por: profile.id,
-        orgao_id: orgao.id,
-        classificacao: ente.classificacao,
-        nome_ente: ente.nomeEnte,
-        uf: ente.uf,
-        nome_responsavel: ente.nomeResponsavel,
-        cargo: ente.cargo,
-        telefone: ente.telefone || null,
-        email: ente.email,
-        objeto_tr: ente.objetoTR,
-        nome_arquivo_tr: body.nomeArquivoTr,
-        resultado_bruto_ia: body.resultado,
-        status: "concluida",
-        relatorio_gerado_em: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
+    // D40: se já existe um rascunho (salvo automaticamente ao terminar a
+    // análise da IA), finaliza ele em vez de criar um registro duplicado.
+    const camposFinais = {
+      criado_por: profile.id,
+      orgao_id: orgao.id,
+      classificacao: ente.classificacao,
+      nome_ente: ente.nomeEnte,
+      uf: ente.uf,
+      nome_responsavel: ente.nomeResponsavel,
+      cargo: ente.cargo,
+      telefone: ente.telefone || null,
+      email: ente.email,
+      objeto_tr: ente.objetoTR,
+      nome_arquivo_tr: body.nomeArquivoTr,
+      resultado_bruto_ia: body.resultado,
+      status: "concluida",
+      relatorio_gerado_em: new Date().toISOString(),
+    };
 
-    if (erroCadastro || !cadastro) {
-      throw new Error("Falha ao salvar o cadastro no histórico: " + (erroCadastro?.message || "erro desconhecido"));
+    let cadastro: { id: string } | null = null;
+    if (body.cadastroId) {
+      const { data, error } = await supabase
+        .from("gp_cadastros_tr")
+        .update(camposFinais)
+        .eq("id", body.cadastroId)
+        .select("id")
+        .single();
+      if (error || !data) {
+        throw new Error("Falha ao finalizar o rascunho: " + (error?.message || "erro desconhecido"));
+      }
+      cadastro = data;
+      // achados do rascunho (se algum ficou salvo) são substituídos pela
+      // versão final revisada abaixo.
+      await supabase.from("gp_achados_tr").delete().eq("cadastro_id", cadastro.id);
+    } else {
+      const { data, error } = await supabase
+        .from("gp_cadastros_tr")
+        .insert(camposFinais)
+        .select("id")
+        .single();
+      if (error || !data) {
+        throw new Error("Falha ao salvar o cadastro no histórico: " + (error?.message || "erro desconhecido"));
+      }
+      cadastro = data;
     }
 
     // D12/D8: vincula a análise ao processo do Follow-up que a originou

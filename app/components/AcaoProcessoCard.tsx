@@ -8,6 +8,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ETAPAS_FLUXO } from "@/lib/processos/etapas";
 import ProcessoTimeline, { HistoricoEtapaTL } from "./ProcessoTimeline";
+import Modal from "./Modal";
+import AnaliseTRConteudo from "./AnaliseTRConteudo";
 
 export interface AcaoProcesso {
   id: string;
@@ -40,6 +42,8 @@ export default function AcaoProcessoCard({
   const [etapaPendente, setEtapaPendente] = useState<number | null>(null);
   const [dataAutenticacao, setDataAutenticacao] = useState(hoje());
   const [confirmando, setConfirmando] = useState(false);
+  // D40: "Analisar TR" abre em modal, em vez de navegar para /tr-analise
+  const [modalAnaliseTr, setModalAnaliseTr] = useState(false);
 
   const p = processo;
   const temTR = p.arquivos.includes("tr");
@@ -166,10 +170,10 @@ export default function AcaoProcessoCard({
                     <input type="file" hidden accept=".pdf,.docx,.txt,.md" disabled={enviando}
                       onChange={(e) => e.target.files?.[0] && enviarTR(e.target.files[0])} />
                   </label>
-                  <Link className="btn-doc" href={`/tr-analise?orgao=${orgaoId}&processo=${p.id}`}
+                  <button type="button" className="btn-doc" onClick={() => setModalAnaliseTr(true)}
                     title="Auditar o TR com IA">
                     🔍 Analisar TR{p.cadastro_tr_id ? " ✓" : ""}
-                  </Link>
+                  </button>
                 </>
               ) : (
                 <label className="btn-doc pendente" title="Enviar o Termo de Referência (PDF, DOCX ou TXT)">
@@ -236,6 +240,12 @@ export default function AcaoProcessoCard({
             </div>
           )}
         </div>
+      )}
+
+      {modalAnaliseTr && (
+        <Modal titulo="Análise de Termo de Referência" onFechar={() => setModalAnaliseTr(false)}>
+          <AnaliseTRConteudo orgaoId={orgaoId} processoId={p.id} onFinalizado={onAtualizado} />
+        </Modal>
       )}
     </div>
   );

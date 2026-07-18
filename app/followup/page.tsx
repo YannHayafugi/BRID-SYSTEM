@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Modal from "@/app/components/Modal";
 import FormularioOrgao from "@/app/components/FormularioOrgao";
+import AnaliseTRConteudo from "@/app/components/AnaliseTRConteudo";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Orgao { id: string; razao_social: string; tipo_ente?: string; cidade?: string; uf?: string }
@@ -53,6 +54,9 @@ function FollowupConteudo() {
   const [abrindo, setAbrindo] = useState(false);
   // D37: cadastro de órgão reaproveita o formulário completo (mesmo de /orgaos), em modal
   const [modalOrgaoAberto, setModalOrgaoAberto] = useState(false);
+
+  // D40: "Analisar TR" abre em modal, em vez de navegar para /tr-analise
+  const [modalAnaliseTr, setModalAnaliseTr] = useState<{ processoId: string; orgaoId: string } | null>(null);
 
   // D36: editar título do processo
   const [editandoTitulo, setEditandoTitulo] = useState<string | null>(null);
@@ -279,6 +283,19 @@ function FollowupConteudo() {
         </Modal>
       )}
 
+      {/* D40: "Analisar TR" abre aqui, em vez de navegar para /tr-analise —
+          o resultado da IA é salvo como rascunho ao terminar, então fechar
+          e reabrir não perde nada nem roda a IA de novo. */}
+      {modalAnaliseTr && (
+        <Modal titulo="Análise de Termo de Referência" onFechar={() => setModalAnaliseTr(null)}>
+          <AnaliseTRConteudo
+            orgaoId={modalAnaliseTr.orgaoId}
+            processoId={modalAnaliseTr.processoId}
+            onFinalizado={carregar}
+          />
+        </Modal>
+      )}
+
       {/* D36: filtros — Órgão, Data (período) e Status (fase) */}
       <div className="item" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 20 }}>
         <div>
@@ -444,10 +461,11 @@ function FollowupConteudo() {
                         onChange={(e) => e.target.files?.[0] && enviarTR(p.id, e.target.files[0])} />
                     </label>
                     {p.orgao?.id ? (
-                      <Link className="btn-doc" href={`/tr-analise?orgao=${p.orgao.id}&processo=${p.id}`}
+                      <button type="button" className="btn-doc"
+                        onClick={() => setModalAnaliseTr({ processoId: p.id, orgaoId: p.orgao!.id })}
                         title="Auditar o TR com IA — os achados ficam vinculados e alimentam a geração da proposta (D8)">
                         🔍 Analisar TR{p.cadastro_tr_id ? " ✓" : ""}
-                      </Link>
+                      </button>
                     ) : (
                       <span className="btn-doc pendente" title="Defina o órgão (cliente) do processo para analisar o TR">
                         🔍 Análise exige órgão
