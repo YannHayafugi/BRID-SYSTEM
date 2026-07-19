@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if ("erro" in check) return NextResponse.json({ erro: check.erro }, { status: check.status });
 
   const body = await req.json();
-  const { email, senha, nomeCompleto, perfil, podeEditarAnalises, podeExcluirAnalises } = body || {};
+  const { email, senha, nomeCompleto, perfil } = body || {};
 
   if (!email || !senha || !perfil) {
     return NextResponse.json({ erro: "E-mail, senha e perfil são obrigatórios." }, { status: 400 });
@@ -58,8 +58,6 @@ export async function POST(req: NextRequest) {
     .update({
       nome_completo: nomeCompleto || null,
       perfil,
-      pode_editar_analises: !!podeEditarAnalises,
-      pode_excluir_analises: !!podeExcluirAnalises,
     })
     .eq("id", created.user.id);
 

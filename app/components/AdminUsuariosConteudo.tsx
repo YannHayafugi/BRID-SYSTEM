@@ -10,8 +10,6 @@ interface Profile {
   email: string;
   nome_completo: string | null;
   perfil: "admin" | "editor" | "visualizador";
-  pode_editar_analises: boolean;
-  pode_excluir_analises: boolean;
   ativo: boolean;
 }
 
@@ -26,8 +24,6 @@ export default function AdminUsuariosConteudo() {
   const [novaSenha, setNovaSenha] = useState("");
   const [novoNome, setNovoNome] = useState("");
   const [novoPerfil, setNovoPerfil] = useState<Profile["perfil"]>("visualizador");
-  const [novoPodeEditar, setNovoPodeEditar] = useState(false);
-  const [novoPodeExcluir, setNovoPodeExcluir] = useState(false);
   const [criando, setCriando] = useState(false);
 
   // D31: filtros da lista de usuários cadastrados + paginação "ver mais".
@@ -108,8 +104,6 @@ export default function AdminUsuariosConteudo() {
           senha: novaSenha,
           nomeCompleto: novoNome.trim() || null,
           perfil: novoPerfil,
-          podeEditarAnalises: novoPodeEditar,
-          podeExcluirAnalises: novoPodeExcluir,
         }),
       });
       const dados = await resp.json();
@@ -119,8 +113,6 @@ export default function AdminUsuariosConteudo() {
       setNovaSenha("");
       setNovoNome("");
       setNovoPerfil("visualizador");
-      setNovoPodeEditar(false);
-      setNovoPodeExcluir(false);
       carregar();
     } catch (err: any) {
       setErro(err.message || "Erro ao criar usuário.");
@@ -137,8 +129,6 @@ export default function AdminUsuariosConteudo() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           perfil: campos.perfil,
-          podeEditarAnalises: campos.pode_editar_analises,
-          podeExcluirAnalises: campos.pode_excluir_analises,
           ativo: campos.ativo,
         }),
       });
@@ -183,16 +173,9 @@ export default function AdminUsuariosConteudo() {
             </select>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 20, marginTop: 10 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-            <input type="checkbox" checked={novoPodeEditar} onChange={(e) => setNovoPodeEditar(e.target.checked)} />
-            Pode editar análises salvas
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-            <input type="checkbox" checked={novoPodeExcluir} onChange={(e) => setNovoPodeExcluir(e.target.checked)} />
-            Pode excluir análises salvas
-          </label>
-        </div>
+        <p className="detalhe" style={{ marginTop: 10 }}>
+          Permissões vêm do perfil: Admin edita e exclui tudo; Editor edita e solicita exclusão ao admin; Visualizador só consulta.
+        </p>
         <div className="actions">
           <button className="btn" onClick={criarUsuario} disabled={criando}>
             {criando ? "Criando..." : "Criar usuário"}
@@ -256,22 +239,6 @@ export default function AdminUsuariosConteudo() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 20, marginTop: 8 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={u.pode_editar_analises}
-                  onChange={(e) => atualizarUsuario(u.id, { pode_editar_analises: e.target.checked })}
-                />
-                Pode editar análises salvas
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={u.pode_excluir_analises}
-                  onChange={(e) => atualizarUsuario(u.id, { pode_excluir_analises: e.target.checked })}
-                />
-                Pode excluir análises salvas
-              </label>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
                 <input
                   type="checkbox"

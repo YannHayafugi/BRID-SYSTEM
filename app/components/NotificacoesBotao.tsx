@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Modal from "./Modal";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface Etapa { nome: string; tipo: "auto" | "manual" }
 interface Processo {
@@ -24,6 +25,10 @@ export default function NotificacoesBotao() {
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [etapas, setEtapas] = useState<Etapa[]>([]);
   const [aberto, setAberto] = useState(false);
+  // D50: admin vê as solicitações de exclusão de análises pendentes
+  const [solicitacoes, setSolicitacoes] = useState<
+    { id: string; cadastro_id: string | null; descricao: string; solicitante: string; criada_em: string }[]
+  >([]);
 
   useEffect(() => {
     fetch("/api/processos").then(async (r) => {
@@ -31,6 +36,23 @@ export default function NotificacoesBotao() {
       const d = await r.json();
       setProcessos(d.processos || []);
       setEtapas(d.etapas || []);
+      if (d.perfil === "admin") {
+        const supabase = getSupabaseBrowserClient();
+        const { data: solics } = await supabase
+          .from("gp_solicitacoes_exclusao")
+          .select("id, cadastro_id, descricao_cadastro, created_at, solicitante:solicitado_por(nome_completo, email)")
+          .eq("status", "pendente")
+          .order("created_at", { ascending: false });
+        setSolicitacoes(
+          (solics || []).map((s: any) => ({
+            id: s.id,
+            cadastro_id: s.cadastro_id,
+            descricao: s.descricao_cadastro,
+            solicitante: s.solicitante?.nome_completo || s.solicitante?.email || "usuário",
+            criada_em: s.created_at,
+          }))
+        );
+      }
     }).catch(() => {});
   }, []);
 
@@ -55,7 +77,7 @@ export default function NotificacoesBotao() {
     return [{ p, msg: `Fase atual: ${etapas[p.etapa]?.nome || "-"}`, pronto: false }];
   });
 
-  const total = avisosAutomacao.length + avisosManual.length;
+  const total = avisosAutomacao.length + avisosManual.length + solicitacoes.length;
 
   return (
     <>
@@ -105,6 +127,21 @@ export default function NotificacoesBotao() {
 
       {aberto && (
         <Modal titulo="🔔 Notificações" onFechar={() => setAberto(false)}>
+          {solicitacoes.length > 0 && (
+            <>
+              <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "4px 0" }}>🗑 Exclusões aguardando sua aprovação</span>
+              {solicitacoes.map((s) => (
+                <Link href={s.cadastro_id ? `/historico/${s.cadastro_id}` : "/historico"} className="item notif" key={s.id}
+                  style={{ display: "block", textDecoration: "none", color: "inherit", cursor: "pointer" }}
+                  title="Abrir a análise para aprovar ou recusar a exclusão" onClick={() => setAberto(false)}>
+                  <div>
+                    <strong>{s.descricao}</strong>
+                    <span className="detalhe">Solicitada por {s.solicitante} em {fmtData(s.criada_em)}</span>
+                  </div>
+                </Link>
+              ))}
+            </>
+          )}
           <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "4px 0" }}>🤖 Automação</span>
           {avisosAutomacao.length ? avisosAutomacao.map((a, i) => (
             <Link href={`/followup?processo=${a.p.id}`} className={`item notif ${a.pronto ? "pronto" : ""}`} key={i}

@@ -41,8 +41,16 @@ export default function HistoricoDetalhePage() {
   const [erro, setErro] = useState<string | null>(null);
   const [cadastro, setCadastro] = useState<CadastroDetalhe | null>(null);
   const [achadosRows, setAchadosRows] = useState<AchadoRow[]>([]);
-  const [podeEditar, setPodeEditar] = useState(false);
-  const [podeExcluir, setPodeExcluir] = useState(false);
+  // D50: permissões derivadas do perfil — admin edita/exclui tudo; editor
+  // edita e solicita exclusão ao admin; visualizador só consulta.
+  const [perfil, setPerfil] = useState<"admin" | "editor" | "visualizador">("visualizador");
+  const podeEditar = perfil === "admin" || perfil === "editor";
+  const podeExcluir = perfil === "admin";
+  const [solicitacaoPendente, setSolicitacaoPendente] = useState<{
+    id: string; motivo: string | null; solicitante: string;
+  } | null>(null);
+  const [solicitando, setSolicitando] = useState(false);
+  const [decidindo, setDecidindo] = useState(false);
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
   const [excluindo, setExcluindo] = useState(false);
   const [justificativas, setJustificativas] = useState<Record<string, string>>({});
@@ -67,13 +75,34 @@ export default function HistoricoDetalhePage() {
 
       const { data: meuProfile } = await supabase
         .from("gp_profiles")
-        .select("perfil, pode_editar_analises, pode_excluir_analises")
+        .select("perfil")
         .eq("id", userData.user.id)
         .single();
       if (meuProfile) {
-        setPodeEditar(meuProfile.perfil === "admin" || meuProfile.pode_editar_analises);
-        setPodeExcluir(meuProfile.perfil === "admin" || meuProfile.pode_excluir_analises);
+        setPerfil(
+          meuProfile.perfil === "admin" || meuProfile.perfil === "editor"
+            ? meuProfile.perfil
+            : "visualizador"
+        );
       }
+
+      // D50: há solicitação de exclusão pendente para esta análise?
+      const { data: solic } = await supabase
+        .from("gp_solicitacoes_exclusao")
+        .select("id, motivo, solicitante:solicitado_por(nome_completo, email)")
+        .eq("cadastro_id", params.id)
+        .eq("status", "pendente")
+        .maybeSingle();
+      setSolicitacaoPendente(
+        solic
+          ? {
+              id: solic.id,
+              motivo: solic.motivo,
+              solicitante:
+                (solic.solicitante as any)?.nome_completo || (solic.solicitante as any)?.email || "usuário",
+            }
+          : null
+      );
 
       const { data: cad, error: erroCad } = await supabase
         .from("gp_cadastros_tr")
@@ -170,6 +199,63 @@ export default function HistoricoDetalhePage() {
     }
   }
 
+  // D50: editor solicita a exclusão; admin decide.
+  async function solicitarExclusao() {
+    const motivo = window.prompt("Motivo da exclusão (será mostrado ao administrador):");
+    if (motivo === null) return;
+    setSolicitando(true);
+    setErro(null);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase.from("gp_solicitacoes_exclusao").insert({
+        cadastro_id: params.id,
+        descricao_cadastro: cadastro
+          ? `${cadastro.classificacao} de ${cadastro.nome_ente} — ${cadastro.nome_arquivo_tr}`
+          : params.id,
+        solicitado_por: userData.user!.id,
+        motivo: motivo.trim() || null,
+      });
+      if (error) throw new Error(error.message);
+      await carregar();
+    } catch (err: any) {
+      setErro(err.message || "Falha ao registrar a solicitação.");
+    } finally {
+      setSolicitando(false);
+    }
+  }
+
+  async function decidirSolicitacao(aprovar: boolean) {
+    if (!solicitacaoPendente) return;
+    if (aprovar && !window.confirm("Aprovar e excluir esta análise? Essa ação não pode ser desfeita.")) return;
+    setDecidindo(true);
+    setErro(null);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const { error: erroDecisao } = await supabase
+        .from("gp_solicitacoes_exclusao")
+        .update({
+          status: aprovar ? "aprovada" : "recusada",
+          decidido_por: userData.user!.id,
+          decidido_em: new Date().toISOString(),
+        })
+        .eq("id", solicitacaoPendente.id);
+      if (erroDecisao) throw new Error(erroDecisao.message);
+      if (aprovar) {
+        const { error } = await supabase.from("gp_cadastros_tr").delete().eq("id", params.id);
+        if (error) throw new Error(error.message);
+        router.push("/historico");
+        return;
+      }
+      await carregar();
+    } catch (err: any) {
+      setErro(err.message || "Falha ao registrar a decisão.");
+    } finally {
+      setDecidindo(false);
+    }
+  }
+
   async function excluirCadastro() {
     if (!window.confirm("Tem certeza que deseja excluir esta análise? Essa ação não pode ser desfeita.")) {
       return;
@@ -249,10 +335,38 @@ export default function HistoricoDetalhePage() {
             <br />
             <strong>Data:</strong> {new Date(cadastro.created_at).toLocaleString("pt-BR")}
           </p>
-          {podeExcluir && (
+          {solicitacaoPendente && (
+            <div className="item-analise" style={{ borderLeft: "3px solid var(--primaria)", marginTop: 10 }}>
+              <strong style={{ fontSize: 13 }}>🗑 Exclusão solicitada por {solicitacaoPendente.solicitante}</strong>
+              {solicitacaoPendente.motivo && (
+                <p className="item-analise-resumo">Motivo: {solicitacaoPendente.motivo}</p>
+              )}
+              {perfil === "admin" ? (
+                <div className="actions">
+                  <button className="btn secondary" disabled={decidindo} onClick={() => decidirSolicitacao(true)}>
+                    {decidindo ? "Processando..." : "✅ Aprovar e excluir"}
+                  </button>
+                  <button className="btn secondary" disabled={decidindo} onClick={() => decidirSolicitacao(false)}>
+                    ❌ Recusar
+                  </button>
+                </div>
+              ) : (
+                <p className="item-analise-resumo">Aguardando decisão de um administrador.</p>
+              )}
+            </div>
+          )}
+          {podeExcluir && !solicitacaoPendente && (
             <div className="actions">
               <button className="btn secondary" onClick={excluirCadastro} disabled={excluindo}>
                 {excluindo ? "Excluindo..." : "Excluir análise"}
+              </button>
+            </div>
+          )}
+          {perfil === "editor" && !solicitacaoPendente && (
+            <div className="actions">
+              <button className="btn secondary" onClick={solicitarExclusao} disabled={solicitando}
+                title="A exclusão precisa ser aprovada por um administrador">
+                {solicitando ? "Enviando..." : "🗑 Solicitar exclusão ao administrador"}
               </button>
             </div>
           )}
