@@ -1,97 +1,178 @@
-# Gerador de Propostas – Securitização (FIA)
+# GRUPO BRID — Gerador de Propostas e Gestão de Processos
 
-Sistema web para gerar, a partir de um formulário, a proposta técnica e comercial de
-securitização em `.docx`, já com capa, timbrado (cabeçalho/rodapé) e corpo padronizado
-da FIA – Fundação Instituto de Administração.
+Sistema web de gestão de processos de propostas para entes públicos: cadastro de
+órgãos (clientes), abertura e acompanhamento de processos por fases (Follow-up),
+análise de Termo de Referência (TR) com IA, geração automática de Proposta +
+Resumo com timbrado FIA, emissão de Ofício, dashboard gerencial e histórico
+auditável — multiusuário, com papéis e permissões.
 
-## O que o sistema faz
+**Stack:** Next.js 14 (App Router, TypeScript) · Supabase (Postgres + Auth +
+Storage, RLS) · Vercel · OpenAI (análise de TR e geração de proposta) ·
+docx.js / pdf-parse / mammoth.
 
-* Formulário com todos os campos variáveis da proposta (ente contratante, data de
-emissão, destinatário, prazo, honorários, parcelas e o cronograma de etapas).
-* Ao clicar em "Gerar proposta (.docx)", o servidor monta o documento Word completo
-(capa + timbrado + corpo do texto formatado em Times New Roman 12, espaçamento 1,5)
-e o navegador baixa o arquivo pronto.
-* O cronograma (item 5 da proposta) é montado como uma tabela de 3 colunas (Etapa,
-Atividades, Período), inserida automaticamente antes do parágrafo padrão do item,
-com as etapas numeradas em algarismos romanos na ordem em que forem cadastradas.
-É possível adicionar, remover e reordenar etapas.
+---
+
+## 1. Implementações
+
+Evolução registrada por decisões numeradas (D1–D51), da migração do modelo
+antigo (senha única, app Vite) para o sistema atual:
+
+* **D1–D14 — Fundação:** migração para Supabase Auth multiusuário com papéis
+  (admin/editor/visualizador) e RLS; cadastro central de Órgãos com contatos;
+  processos do Follow-up com fluxo de documentos TR → Proposta → Ofício.
+* **D18–D29 — Navegação e acompanhamento:** header global com modais (Órgãos,
+  Histórico, Administração, Perfil); timeline vertical de fases na página do
+  órgão; troca de fase manual com data de autenticação e histórico; sino de
+  notificações global; "criado por" visível para admins.
+* **D36–D39 — Follow-up produtivo:** filtros (órgão, período, fase), edição de
+  título/órgão, modais de "Abrir processo" e "Novo órgão" reutilizando o
+  formulário completo; análise de TR automática a partir do arquivo já anexado.
+* **D40–D42 — Análise de TR em modal com rascunho:** a análise abre em modal
+  (sem sair da página) e o resultado da IA é salvo imediatamente como rascunho
+  (`status em_analise`) — fechar/reabrir não perde nada nem repete a IA; botão
+  com 3 estados (Analisar / Pré-análise pronta / Concluída ✓); suporte a TR em
+  PDF **e DOCX**; dashboard sem processos finalizados nas listas.
+* **D43–D48 — Papéis nas fases:** admin muda o processo para **qualquer** fase;
+  editor **avança para a próxima** fase; visualizador só consulta (timeline em
+  dropdown); cards-resumo no topo do Follow-up; tag e seção "✅ Finalizados";
+  Histórico mostra apenas o que o próprio usuário criou.
+* **D49–D51 — Permissões e feedback:** permissões de análises derivadas do
+  perfil; exclusão de análise por editor vira **solicitação aprovada pelo
+  admin**; botão 💬 de erros/sugestões com notificação ao admin; remoção da
+  senha legada do localStorage.
+
+## 2. Funcionalidades
+
+* **Órgãos (clientes):** cadastro completo (tipo de ente, razão social, CNPJ
+  único, cidade/UF, contatos), edição e página de detalhe com os processos do
+  órgão.
+* **Follow-up:** abertura de processos vinculados a um órgão; 8 fases (3
+  automáticas 🤖 guiadas pelos documentos + 5 manuais ✋ com data de
+  autenticação); cards-resumo (Em andamento / Finalizados / Total); filtros;
+  seção separada de finalizados; edição de título/órgão; exclusão.
+* **Análise de TR com IA:** upload de PDF/DOCX (ou uso do TR já anexado ao
+  processo); achados classificados com ciência/comentário obrigatórios;
+  rascunho persistente; relatório final em PDF gravado no Histórico e
+  vinculado ao processo.
+* **Geração de Proposta:** a partir do TR, gera Proposta + Resumo executivo em
+  `.docx` com timbrado FIA; aprovação da proposta libera o Ofício.
+* **Ofício:** emissão vinculada ao processo após aprovação da proposta.
+* **Dashboard:** 8 KPIs, funil por fase, evolução mensal, ranking de órgãos,
+  automática × manual; listas "por fase" e "progresso" (sem finalizados);
+  filtros e drill-down para o Follow-up.
+* **Histórico:** análises de TR e processos criados pelo próprio usuário;
+  detalhe da análise com edição versionada (justificativa obrigatória +
+  histórico de versões).
+* **Notificações (🔔):** pendências de automação e fases manuais; para admins,
+  solicitações de exclusão e feedbacks dos usuários.
+* **Erros e sugestões (💬):** qualquer usuário relata erro ou sugere melhoria;
+  admin recebe, acompanha e marca como resolvido.
+* **Administração de usuários:** criação com senha provisória, papel
+  (admin/editor/visualizador) e ativação/desativação.
+* **Perfil e tema:** edição de nome/e-mail/senha; tema claro/escuro persistente
+  (inclusive no login).
+
+## 3. Camadas de segurança
+
+1. **Autenticação** — Supabase Auth (e-mail/senha); sem sessão, as rotas de API
+   respondem 401 e as páginas redirecionam ao login. Nenhuma senha é gravada
+   no navegador (a chave legada `senha` do modelo antigo é removida
+   automaticamente do localStorage).
+2. **Autorização por papel (RLS + API)** — todas as tabelas `gp_*` têm Row
+   Level Security; as regras valem no banco, não só na interface:
+   * *Admin*: acesso total — muda processos para qualquer fase, edita/exclui
+     análises, aprova exclusões, administra usuários.
+   * *Editor*: cria/edita análises e propostas; só avança processos para a
+     próxima fase; exclusão de análise apenas via solicitação aprovada.
+   * *Visualizador*: somente leitura.
+   * Usuário **inativo** perde o acesso aos dados imediatamente (checagem
+     `p.ativo` nas policies).
+3. **Dupla validação** — as rotas de API revalidam papel e regra de negócio no
+   servidor (ex.: editor tentando pular fase recebe 403), independentemente do
+   que a interface mostra.
+4. **Auditoria** — histórico de fases com data de autenticação e autor; edição
+   de achados versionada com justificativa obrigatória; solicitações de
+   exclusão registram quem pediu, quem decidiu e quando; feedbacks registram
+   autor e página.
+5. **Administração restrita** — rotas `/api/admin/*` exigem perfil admin e usam
+   a service key **apenas no servidor**; chaves sensíveis ficam em variáveis de
+   ambiente da Vercel (nunca no cliente).
+
+---
+
+## 4. Criando novos módulos e funcionalidades (com IA)
+
+O projeto mantém um **arquivo de contexto** para desenvolvimento assistido por
+IA: [`docs/CONTEXTO.md`](docs/CONTEXTO.md). Ele resume arquitetura, convenções,
+tabelas, papéis e os padrões obrigatórios (modais, RLS, decisões numeradas).
+
+### Fluxo recomendado
+
+1. **Anexe o contexto:** envie `docs/CONTEXTO.md` junto do pedido (ou peça para
+   o agente lê-lo primeiro).
+2. **Descreva o módulo** com o prompt-modelo abaixo.
+3. **Confirme o plano antes do código:** peça sempre "confirme o que será
+   implementado antes de implementar".
+4. **Valide e publique:** revise o diff, rode `npm run build` local se
+   possível, e faça commit/push (a Vercel publica sozinha).
+5. **Registre a decisão:** toda mudança relevante ganha um número `D<n>`
+   comentado no código e citado no commit.
+
+### Prompt-modelo
+
+```text
+Leia o arquivo docs/CONTEXTO.md antes de começar.
+
+Quero criar o módulo/funcionalidade: <nome>
+
+O que ele deve fazer:
+- <comportamento 1>
+- <comportamento 2>
+
+Quem pode usar: <admin / editor / visualizador — o que cada um pode fazer>
+
+Onde aparece: <página nova ou existente, modal, header, notificações...>
+
+Dados: <novas tabelas/colunas necessárias, ou tabelas existentes envolvidas>
+
+Regras de segurança: aplicar RLS no banco seguindo o padrão do CONTEXTO.md
+(admin/editor/visualizador + usuário ativo) e revalidar no servidor.
+
+Confirme comigo o que será implementado antes de escrever código.
+```
+
+---
 
 ## Estrutura do projeto
 
 ```
 app/
-  page.tsx              -> formulário (interface)
-  api/generate/route.ts -> endpoint que gera o .docx
-  layout.tsx, globals.css
-lib/
-  docxBuilder.ts   -> monta o documento Word (docx.js)
-  types.ts         -> tipos dos dados do formulário
-  extenso.ts       -> números por extenso (datas, valores, prazos)
-  parseAtividades.ts -> interpreta o texto de "Atividades" de cada etapa
-  roman.ts         -> numeração romana das etapas
-  etapasPadrao.ts  -> conteúdo pré-preenchido das 5 etapas padrão
-public/assets/     -> imagens da capa, cabeçalho e rodapé (timbrado FIA)
+  dashboard/         -> KPIs, gráficos e listas gerenciais
+  followup/          -> processos por fase (núcleo operacional)
+  orgaos/[id]/       -> detalhe do órgão + processos (Ações)
+  historico/         -> análises de TR e processos do usuário
+  tr-analise/        -> análise de TR (também aberta em modal)
+  oficio/            -> emissão de ofício
+  login/, perfil/, arquivos/
+  api/               -> rotas (processos, tr, orgaos, admin, generate...)
+  components/        -> Modal, BarraUsuario, NotificacoesBotao, FeedbackBotao,
+                        AnaliseTRConteudo, ProcessoTimeline, FormularioOrgao...
+lib/                 -> docxBuilder, pdfExtract, etapas do fluxo, tipos, IA
+docs/                -> CONTEXTO.md (contexto p/ IA), PLANO-MIGRACAO.md
+supabase/            -> schema unificado (referência)
 ```
 
-## Como publicar (passo a passo)
-
-Você já tem conta no GitHub e na Vercel, então faltam três passos:
-
-### 1\. Subir o projeto para o GitHub
-
-1. Baixe/copie esta pasta (`proposta-securitizacao`) para o seu computador.
-2. No GitHub, crie um repositório novo (por exemplo `proposta-securitizacao-fia`),
-vazio, sem README.
-3. No terminal, dentro da pasta do projeto:
-
-```bash
-   git init
-   git add .
-   git commit -m "Primeira versão do gerador de propostas"
-   git branch -M main
-   git remote add origin https://github.com/YannHayafugi/Gerador\_de\_Proposta\_Securitizacao
-   git push -u origin main
-   ```
-
-   (Se preferir não usar linha de comando, você também pode arrastar os arquivos
-pela interface web do GitHub em "Add file" > "Upload files" — exceto a pasta
-`node\_modules`, que não deve ser enviada.)
-
-### 2\. Importar na Vercel
-
-1. Acesse [vercel.com/new](https://vercel.com/new) e escolha "Import Git Repository".
-2. Selecione o repositório que você acabou de criar.
-3. A Vercel detecta automaticamente que é um projeto Next.js — não é preciso
-configurar nada, apenas clique em "Deploy".
-4. Em poucos minutos você recebe uma URL pública (ex.:
-`https://proposta-securitizacao-fia.vercel.app`) que pode ser acessada de
-qualquer navegador.
-
-### 3\. Atualizações futuras
-
-Sempre que quiser alterar algo (texto padrão, campos do formulário, etc.), edite os
-arquivos, faça `git commit` + `git push`, e a Vercel publica a nova versão
-automaticamente.
-
-## Testar localmente (opcional)
-
-Se tiver Node.js instalado:
+## Rodar localmente
 
 ```bash
 npm install
-npm run dev
+npm run dev   # http://localhost:3000
 ```
 
-Depois acesse `http://localhost:3000`.
+Variáveis necessárias (`.env.local`): `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`.
 
-## Observações sobre o conteúdo da proposta
+## Publicação
 
-* O texto fixo do corpo (itens 1, 3, 4, 7 a 11) segue exatamente o conteúdo padrão
-fornecido, com os trechos variáveis (`Município`/`Estado`, nome do ente, UF, data,
-destinatário, prazo, honorários e parcelas) substituídos automaticamente.
-* Valores por extenso (datas, honorários totais, valor da parcela e prazos em meses)
-são calculados automaticamente a partir dos números informados no formulário.
-* No campo "Atividades" de cada etapa, use `\*\*texto\*\*` para um título de grupo em
-negrito e recue com espaços as linhas de sub-atividades (elas viram marcadores
-“•” na tabela final). Esse é o mesmo padrão já usado no conteúdo pré-preenchido.
-
+`git commit` + `git push` na branch principal — a Vercel faz build e publica
+automaticamente.
