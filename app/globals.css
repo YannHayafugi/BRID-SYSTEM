@@ -417,6 +417,8 @@ textarea {
   animation: landing-surgir .9s ease .45s both;
 }
 .landing-cta:hover { transform: translateY(-2px); opacity: .92; }
+.landing-atalhos { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+.landing-cta.secundario { background:transparent; color:#E8C65B; border:1px solid #E8C65B; }
 .landing-rodape {
   color: #69727d;
   font-size: 12px;

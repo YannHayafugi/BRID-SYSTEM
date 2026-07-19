@@ -34,9 +34,15 @@ export default function PaginaInicial() {
           análise de TR com IA e dashboard.
         </p>
 
-        <Link href={logado ? "/dashboard" : "/login"} className="landing-cta">
-          {logado ? "Ir para o Dashboard →" : "Acessar o sistema →"}
-        </Link>
+        {logado ? (
+          <div className="landing-atalhos">
+            <Link href="/dashboard" className="landing-cta">Ir para o Dashboard →</Link>
+            <Link href="/followup" className="landing-cta secundario">Ir para o Follow-up →</Link>
+            <Link href="/arquivos" className="landing-cta secundario">Ir para Arquivos →</Link>
+          </div>
+        ) : (
+          <Link href="/login" className="landing-cta">Acessar o sistema →</Link>
+        )}
       </div>
 
       <footer className="landing-rodape">
