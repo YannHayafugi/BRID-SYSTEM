@@ -29,6 +29,26 @@ export default function NotificacoesBotao() {
   const [solicitacoes, setSolicitacoes] = useState<
     { id: string; cadastro_id: string | null; descricao: string; solicitante: string; criada_em: string }[]
   >([]);
+  // D51: admin vê erros e sugestões de melhoria enviados pelos usuários
+  const [feedbacks, setFeedbacks] = useState<
+    { id: string; tipo: "erro" | "sugestao"; mensagem: string; pagina: string | null; autor: string; criado_em: string }[]
+  >([]);
+  const [resolvendo, setResolvendo] = useState<string | null>(null);
+
+  async function resolverFeedback(id: string) {
+    setResolvendo(id);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("gp_feedbacks")
+        .update({ status: "resolvido", resolvido_por: userData.user?.id, resolvido_em: new Date().toISOString() })
+        .eq("id", id);
+      if (!error) setFeedbacks((prev) => prev.filter((f) => f.id !== id));
+    } finally {
+      setResolvendo(null);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/processos").then(async (r) => {
@@ -50,6 +70,23 @@ export default function NotificacoesBotao() {
             descricao: s.descricao_cadastro,
             solicitante: s.solicitante?.nome_completo || s.solicitante?.email || "usuário",
             criada_em: s.created_at,
+          }))
+        );
+
+        // D51: erros e sugestões abertos
+        const { data: fbs } = await supabase
+          .from("gp_feedbacks")
+          .select("id, tipo, mensagem, pagina, created_at, autor:criado_por(nome_completo, email)")
+          .eq("status", "aberto")
+          .order("created_at", { ascending: false });
+        setFeedbacks(
+          (fbs || []).map((f: any) => ({
+            id: f.id,
+            tipo: f.tipo,
+            mensagem: f.mensagem,
+            pagina: f.pagina,
+            autor: f.autor?.nome_completo || f.autor?.email || "usuário",
+            criado_em: f.created_at,
           }))
         );
       }
@@ -77,7 +114,7 @@ export default function NotificacoesBotao() {
     return [{ p, msg: `Fase atual: ${etapas[p.etapa]?.nome || "-"}`, pronto: false }];
   });
 
-  const total = avisosAutomacao.length + avisosManual.length + solicitacoes.length;
+  const total = avisosAutomacao.length + avisosManual.length + solicitacoes.length + feedbacks.length;
 
   return (
     <>
@@ -139,6 +176,25 @@ export default function NotificacoesBotao() {
                     <span className="detalhe">Solicitada por {s.solicitante} em {fmtData(s.criada_em)}</span>
                   </div>
                 </Link>
+              ))}
+            </>
+          )}
+          {feedbacks.length > 0 && (
+            <>
+              <span className="detalhe" style={{ fontWeight: 700, display: "block", margin: "4px 0" }}>💬 Erros e sugestões dos usuários</span>
+              {feedbacks.map((f) => (
+                <div className="item notif" key={f.id} style={{ display: "block" }}>
+                  <strong>{f.tipo === "erro" ? "🐞 Erro" : "💡 Sugestão"} — {f.autor}</strong>
+                  <span className="detalhe" style={{ whiteSpace: "pre-wrap" }}>{f.mensagem}</span>
+                  <span className="detalhe">
+                    {f.pagina ? `Página: ${f.pagina} — ` : ""}{fmtData(f.criado_em)}
+                  </span>
+                  <button type="button" className="btn-doc" style={{ marginTop: 6 }}
+                    disabled={resolvendo === f.id} onClick={() => resolverFeedback(f.id)}
+                    title="Marcar como resolvido — sai das notificações">
+                    {resolvendo === f.id ? "Salvando..." : "✓ Marcar como resolvido"}
+                  </button>
+                </div>
               ))}
             </>
           )}
