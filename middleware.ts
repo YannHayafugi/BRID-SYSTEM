@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const ROTAS_PUBLICAS = ["/login"];
+// D52: "/" é a página inicial pública (landing) — vem antes do login.
+const ROTAS_PUBLICAS = ["/", "/login"];
 
 export async function middleware(request: NextRequest) {
   const { supabaseResponse, autenticado, contaInativa } = await updateSession(request);
 
   const path = request.nextUrl.pathname;
-  const rotaPublica = ROTAS_PUBLICAS.some((r) => path === r || path.startsWith(r + "/"));
+  const rotaPublica = ROTAS_PUBLICAS.some((r) => path === r || (r !== "/" && path.startsWith(r + "/")));
 
   // Rotas de API tratam sua própria autorização (ou dependem do RLS do
   // Supabase); não redirecionamos aqui para não quebrar chamadas fetch com
@@ -28,9 +29,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Logado no /login vai direto ao Dashboard (a landing "/" continua
+  // acessível para qualquer um).
   if (autenticado && path === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);
   }
