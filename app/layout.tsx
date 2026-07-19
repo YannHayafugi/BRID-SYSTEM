@@ -1,6 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Inter, Montserrat } from "next/font/google";
+import { Antonio, Inter, Montserrat } from "next/font/google";
 import BarraUsuario from "./components/BarraUsuario";
 
 // D25: tipografia da marca Grupo BRID — títulos/nav em Montserrat (bold,
@@ -14,6 +14,14 @@ const montserrat = Montserrat({
 const inter = Inter({
   subsets: ["latin"],
   variable: "--fonte-corpo",
+  display: "swap",
+});
+// D52: fonte dos títulos do site institucional (grupobrid.com) — usada na
+// página inicial pública.
+const antonio = Antonio({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  variable: "--fonte-brid",
   display: "swap",
 });
 
@@ -45,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
       </head>
-      <body className={`${montserrat.variable} ${inter.variable}`}>
+      <body className={`${montserrat.variable} ${inter.variable} ${antonio.variable}`}>
         <BarraUsuario />
         {children}
       </body>

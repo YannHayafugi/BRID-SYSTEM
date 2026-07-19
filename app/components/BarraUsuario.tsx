@@ -66,7 +66,7 @@ export default function BarraUsuario() {
     setModalAberto(null);
   }, [pathname]);
 
-  if (pathname === "/login" || !email) return null;
+  if (pathname === "/" || pathname === "/login" || !email) return null;
 
   async function sair() {
     const supabase = getSupabaseBrowserClient();

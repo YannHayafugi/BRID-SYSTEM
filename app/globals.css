@@ -355,6 +355,78 @@ textarea {
 .btn-doc.destaque { background:var(--primaria); color:var(--escuro); border:1px solid var(--primaria); }
 .downloads { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
 
+/* D52: página inicial pública (landing enxuta, identidade grupobrid.com) —
+   sempre escura, independente do tema escolhido no app. */
+.landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: #111;
+  padding: 40px 20px 24px;
+  text-align: center;
+}
+.landing-conteudo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: landing-surgir .9s ease both;
+}
+.landing-marca {
+  font-family: var(--fonte-titulo), sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .35em;
+  color: #E8C65B;
+  text-transform: uppercase;
+}
+.landing-titulo {
+  font-family: var(--fonte-brid), var(--fonte-titulo), sans-serif;
+  font-weight: 700;
+  font-size: clamp(30px, 6vw, 52px);
+  line-height: 1.1;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: #fff;
+  margin: 0;
+}
+.landing-sub {
+  color: #c9c4b6;
+  font-size: 15px;
+  max-width: 480px;
+  margin: 0;
+  animation: landing-surgir .9s ease .25s both;
+}
+.landing-cta {
+  display: inline-block;
+  margin-top: 10px;
+  background: #E8C65B;
+  color: #181511;
+  font-family: var(--fonte-titulo), sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  text-decoration: none;
+  padding: 13px 30px;
+  border-radius: 8px;
+  transition: transform .2s ease, opacity .2s ease;
+  animation: landing-surgir .9s ease .45s both;
+}
+.landing-cta:hover { transform: translateY(-2px); opacity: .92; }
+.landing-rodape {
+  color: #69727d;
+  font-size: 12px;
+  animation: landing-surgir .9s ease .65s both;
+}
+@keyframes landing-surgir {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .fu-topo { position:relative; padding-right:64px; width:100%; }
 .fu-icones { position:absolute; top:0; right:0; display:flex; align-items:center; gap:2px; }
 .fu-icone-btn { background:none; border:none; cursor:pointer; padding:6px; border-radius:8px;
