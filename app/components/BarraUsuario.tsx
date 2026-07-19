@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import Modal from "./Modal";
 import ThemeToggle from "./ThemeToggle";
@@ -24,7 +24,6 @@ type TipoPerfil = "admin" | "editor" | "visualizador" | null;
  * atual. Não aparece na tela de login. */
 export default function BarraUsuario() {
   const pathname = usePathname();
-  const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
   const [tipoPerfil, setTipoPerfil] = useState<TipoPerfil>(null);
@@ -71,8 +70,10 @@ export default function BarraUsuario() {
   async function sair() {
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.replace("/login");
-    router.refresh();
+    // D52: ao sair, volta para a página inicial (landing com "Acessar o
+    // sistema"). Navegação completa (window.location) para a página atual não
+    // disparar seu próprio redirect de 401 para /login no meio do caminho.
+    window.location.href = "/";
   }
 
   const abas = [
