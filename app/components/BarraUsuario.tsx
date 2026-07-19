@@ -115,7 +115,9 @@ export default function BarraUsuario() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Image src="/logo.svg" alt="Logo" width={34} height={34} style={{ borderRadius: 8 }} />
+          <Link href="/" title="Voltar à página inicial" style={{ display: "flex", alignItems: "center" }}>
+            <Image src="/logo.svg" alt="Logo" width={34} height={34} style={{ borderRadius: 8 }} />
+          </Link>
           <nav style={{ display: "flex", gap: 4 }}>
             {abas.map((a) => {
               const ativa = pathname.startsWith(a.href);
