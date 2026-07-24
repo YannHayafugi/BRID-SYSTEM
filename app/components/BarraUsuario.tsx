@@ -76,11 +76,19 @@ export default function BarraUsuario() {
     window.location.href = "/";
   }
 
-  const abas = [
-    { href: "/dashboard", rotulo: "Dashboard" },
-    { href: "/followup", rotulo: "Follow-up" },
-    { href: "/arquivos", rotulo: "Arquivos" },
-  ];
+  // O SADA é um módulo à parte: dentro de /sada a navegação troca para as
+  // abas do SADA (Dashboard + Atualização da Dívida), sem Follow-up/Arquivos.
+  const emSada = pathname.startsWith("/sada");
+  const abas = emSada
+    ? [
+        { href: "/sada", rotulo: "Dashboard", exact: true },
+        { href: "/sada/atualizacao", rotulo: "Atualização da Dívida" },
+      ]
+    : [
+        { href: "/dashboard", rotulo: "Dashboard", exact: true },
+        { href: "/followup", rotulo: "Follow-up" },
+        { href: "/arquivos", rotulo: "Arquivos" },
+      ];
 
   const linkEstilo = (ativo?: boolean): React.CSSProperties => ({
     color: "var(--primaria)",
@@ -120,7 +128,7 @@ export default function BarraUsuario() {
           </Link>
           <nav style={{ display: "flex", gap: 4 }}>
             {abas.map((a) => {
-              const ativa = pathname.startsWith(a.href);
+              const ativa = a.exact ? pathname === a.href : pathname.startsWith(a.href);
               return (
                 <Link
                   key={a.href}
