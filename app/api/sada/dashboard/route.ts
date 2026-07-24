@@ -15,6 +15,10 @@ export async function GET() {
   if (!profile) {
     return NextResponse.json({ erro: "Sessão expirada. Faça login novamente." }, { status: 401 });
   }
+  // Acesso ao SADA: superadmin ou usuário liberado (pode_ver_sada).
+  if (!profile.is_superadmin && !profile.pode_ver_sada) {
+    return NextResponse.json({ erro: "Você não tem acesso ao módulo SADA." }, { status: 403 });
+  }
 
   const sb = getSupabaseAdmin();
   const num = (v: unknown) => Number(v ?? 0);

@@ -11,10 +11,20 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function PaginaInicial() {
   const [logado, setLogado] = useState(false);
+  const [veSada, setVeSada] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-    supabase.auth.getUser().then(({ data }) => setLogado(!!data.user));
+    supabase.auth.getUser().then(async ({ data }) => {
+      setLogado(!!data.user);
+      if (!data.user) return;
+      const { data: p } = await supabase
+        .from("gp_profiles")
+        .select("is_superadmin, pode_ver_sada")
+        .eq("id", data.user.id)
+        .single();
+      setVeSada(!!(p?.is_superadmin || p?.pode_ver_sada));
+    });
   }, []);
 
   return (
@@ -37,7 +47,7 @@ export default function PaginaInicial() {
         {logado ? (
           <div className="landing-atalhos">
             <Link href="/dashboard" className="landing-cta">Gestão de Propostas →</Link>
-            <Link href="/sada" className="landing-cta">SADA — Dívida Ativa →</Link>
+            {veSada && <Link href="/sada" className="landing-cta">SADA — Dívida Ativa →</Link>}
             <Link href="/followup" className="landing-cta secundario">Follow-up →</Link>
             <Link href="/arquivos" className="landing-cta secundario">Arquivos →</Link>
           </div>

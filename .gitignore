@@ -11,3 +11,5 @@ out
 # Arquivos de teste usados durante o desenvolvimento (não fazem parte do sistema)
 teste.pdf
 texto-extraido.txt
+*.xlsx
+tsconfig.tsbuildinfo

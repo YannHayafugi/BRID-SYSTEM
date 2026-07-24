@@ -42,6 +42,7 @@ export default function SadaPage() {
       .then(async (r) => {
         if (r.status === 401) { window.location.href = "/login"; return; }
         const j = await r.json();
+        if (r.status === 403) throw new Error(j.erro || "Você não tem acesso ao módulo SADA.");
         if (!r.ok) throw new Error(j.erro || "Falha ao carregar.");
         setD(j);
       })

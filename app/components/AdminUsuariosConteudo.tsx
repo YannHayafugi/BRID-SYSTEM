@@ -11,12 +11,15 @@ interface Profile {
   nome_completo: string | null;
   perfil: "admin" | "editor" | "visualizador";
   ativo: boolean;
+  is_superadmin?: boolean;
+  pode_ver_sada?: boolean;
 }
 
 export default function AdminUsuariosConteudo() {
   const [carregando, setCarregando] = useState(true);
   const [autorizado, setAutorizado] = useState<boolean | null>(null);
   const [usuarios, setUsuarios] = useState<Profile[]>([]);
+  const [souSuperadmin, setSouSuperadmin] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
@@ -76,6 +79,7 @@ export default function AdminUsuariosConteudo() {
       const dados = await resp.json();
       if (!resp.ok) throw new Error(dados.erro || "Falha ao carregar usuários.");
       setUsuarios(dados.usuarios);
+      setSouSuperadmin(!!dados.souSuperadmin);
     } catch (err: any) {
       setErro(err.message || "Erro ao carregar usuários.");
     } finally {
@@ -130,6 +134,8 @@ export default function AdminUsuariosConteudo() {
         body: JSON.stringify({
           perfil: campos.perfil,
           ativo: campos.ativo,
+          isSuperadmin: campos.is_superadmin,
+          podeVerSada: campos.pode_ver_sada,
         }),
       });
       const dados = await resp.json();
@@ -238,7 +244,7 @@ export default function AdminUsuariosConteudo() {
                 </select>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 20, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 20, marginTop: 8, flexWrap: "wrap" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
                 <input
                   type="checkbox"
@@ -247,6 +253,30 @@ export default function AdminUsuariosConteudo() {
                 />
                 Ativo
               </label>
+
+              {/* Controles exclusivos de superadmin — invisíveis para admin comum */}
+              {souSuperadmin && (
+                <>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!u.pode_ver_sada || !!u.is_superadmin}
+                      disabled={!!u.is_superadmin}
+                      title={u.is_superadmin ? "Superadmin sempre vê o SADA" : undefined}
+                      onChange={(e) => atualizarUsuario(u.id, { pode_ver_sada: e.target.checked })}
+                    />
+                    Vê SADA
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!u.is_superadmin}
+                      onChange={(e) => atualizarUsuario(u.id, { is_superadmin: e.target.checked })}
+                    />
+                    Superadmin
+                  </label>
+                </>
+              )}
             </div>
           </div>
         ))}

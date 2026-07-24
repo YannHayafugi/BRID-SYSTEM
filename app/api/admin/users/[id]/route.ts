@@ -17,7 +17,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if ("erro" in check) return NextResponse.json({ erro: check.erro }, { status: check.status });
 
   const body = await req.json();
-  const { nomeCompleto, perfil, ativo } = body || {};
+  const { nomeCompleto, perfil, ativo, isSuperadmin, podeVerSada } = body || {};
+
+  // is_superadmin e pode_ver_sada só podem ser alterados por um superadmin.
+  const souSuper = !!check.profile.is_superadmin;
+  if (!souSuper && (isSuperadmin !== undefined || podeVerSada !== undefined)) {
+    return NextResponse.json(
+      { erro: "Apenas superadmins podem alterar essas permissões." },
+      { status: 403 }
+    );
+  }
 
   const admin = getSupabaseAdmin();
   const { error } = await admin
@@ -26,6 +35,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(nomeCompleto !== undefined ? { nome_completo: nomeCompleto } : {}),
       ...(perfil !== undefined ? { perfil } : {}),
       ...(ativo !== undefined ? { ativo } : {}),
+      ...(souSuper && isSuperadmin !== undefined ? { is_superadmin: isSuperadmin } : {}),
+      ...(souSuper && podeVerSada !== undefined ? { pode_ver_sada: podeVerSada } : {}),
     })
     .eq("id", params.id);
 

@@ -22,7 +22,16 @@ export async function GET() {
     .order("created_at", { ascending: true });
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, usuarios: data });
+
+  // Sigilo do superadmin: só outro superadmin enxerga is_superadmin/pode_ver_sada.
+  // Para o admin comum, esses campos são mascarados (false) — ele vê o
+  // superadmin como um administrador qualquer.
+  const souSuper = !!check.profile.is_superadmin;
+  const usuarios = (data ?? []).map((u) =>
+    souSuper ? u : { ...u, is_superadmin: false, pode_ver_sada: false }
+  );
+
+  return NextResponse.json({ ok: true, usuarios, souSuperadmin: souSuper });
 }
 
 export async function POST(req: NextRequest) {
