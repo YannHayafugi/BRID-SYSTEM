@@ -36,9 +36,10 @@ export default function PaginaInicial() {
 
         {logado ? (
           <div className="landing-atalhos">
-            <Link href="/dashboard" className="landing-cta">Ir para o Dashboard →</Link>
-            <Link href="/followup" className="landing-cta secundario">Ir para o Follow-up →</Link>
-            <Link href="/arquivos" className="landing-cta secundario">Ir para Arquivos →</Link>
+            <Link href="/dashboard" className="landing-cta">Gestão de Propostas →</Link>
+            <Link href="/sada" className="landing-cta">SADA — Dívida Ativa →</Link>
+            <Link href="/followup" className="landing-cta secundario">Follow-up →</Link>
+            <Link href="/arquivos" className="landing-cta secundario">Arquivos →</Link>
           </div>
         ) : (
           <Link href="/login" className="landing-cta">Acessar o sistema →</Link>
