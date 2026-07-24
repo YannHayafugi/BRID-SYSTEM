@@ -13,3 +13,7 @@ teste.pdf
 texto-extraido.txt
 *.xlsx
 tsconfig.tsbuildinfo
+
+.env*
+.env
+.env.local
