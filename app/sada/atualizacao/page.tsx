@@ -5,14 +5,17 @@
  * O navegador lê e converte a planilha e envia ao servidor em lotes pequenos
  * (o Vercel limita o corpo da requisição), com barra de progresso. O lote novo
  * entra como vigente e o anterior é preservado como histórico. */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
-  linhaVazia, mapearLinha, ROTULO_TIPO, TIPOS_SADA, TipoSada,
+  analisarQualidade, linhaVazia, mapearLinha, RelatorioQualidade,
+  ROTULO_TIPO, TIPOS_SADA, TipoSada,
 } from "@/lib/sada/import";
 
 const LOTE = 1000;
+
+interface Aba { ano: number; linhas: unknown[][] }
 
 export default function AtualizacaoDivida() {
   const [tipo, setTipo] = useState<TipoSada>("divida_ativa");
@@ -23,6 +26,30 @@ export default function AtualizacaoDivida() {
   const [status, setStatus] = useState("");
   const [erro, setErro] = useState("");
   const [concluido, setConcluido] = useState<string | null>(null);
+  const [relatorio, setRelatorio] = useState<RelatorioQualidade | null>(null);
+  // Planilha já lida — evita reprocessar o arquivo ao confirmar os avisos.
+  const cache = useRef<{ arquivo: File; tipo: TipoSada; abas: Aba[] } | null>(null);
+
+  /** Troca de arquivo/tipo invalida a verificação anterior. */
+  function resetarVerificacao() {
+    setRelatorio(null); setErro(""); setConcluido(null);
+  }
+
+  async function lerPlanilha(f: File, t: TipoSada): Promise<Aba[]> {
+    const c = cache.current;
+    if (c && c.arquivo === f && c.tipo === t) return c.abas;
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const abas: Aba[] = wb.SheetNames
+      .map((nome) => ({ nome, ano: parseInt(nome, 10) }))
+      .filter((a) => Number.isFinite(a.ano))
+      .map(({ nome, ano }) => {
+        const m = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: false });
+        return { ano, linhas: m.slice(1).filter((r) => !linhaVazia(r as unknown[])) as unknown[][] };
+      });
+    cache.current = { arquivo: f, tipo: t, abas };
+    return abas;
+  }
 
   async function post(url: string, body: unknown) {
     const r = await fetch(url, {
@@ -35,7 +62,8 @@ export default function AtualizacaoDivida() {
     return j;
   }
 
-  async function atualizar() {
+  /** `forcar` = usuário já viu os avisos e mandou seguir mesmo assim. */
+  async function atualizar(forcar = false) {
     setErro(""); setConcluido(null);
     if (!cnpj.trim()) { setErro("Informe o CNPJ do ente."); return; }
     if (!arquivo) { setErro("Selecione a planilha (.xlsx)."); return; }
@@ -46,19 +74,25 @@ export default function AtualizacaoDivida() {
     let anoMin = Infinity, anoMax = -Infinity;
 
     try {
-      const buf = await arquivo.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-
-      // Pré-computa o total de linhas (para a barra de progresso)
-      const abas = wb.SheetNames
-        .map((nome) => ({ nome, ano: parseInt(nome, 10) }))
-        .filter((a) => Number.isFinite(a.ano));
-      const linhasPorAba = abas.map(({ nome }) => {
-        const m = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: false });
-        return m.slice(1).filter((r) => !linhaVazia(r as unknown[]));
-      });
-      const totalLinhas = linhasPorAba.reduce((s, l) => s + l.length, 0);
+      const abas = await lerPlanilha(arquivo, tipo);
+      const totalLinhas = abas.reduce((s, a) => s + a.linhas.length, 0);
       if (totalLinhas === 0) throw new Error("A planilha não tem linhas de dados.");
+
+      // Verificação de qualidade ANTES de abrir o lote: /api/sada/importar já
+      // marca a importação anterior como não-vigente, então uma planilha ruim
+      // derrubaria o retrato atual sem ter nada correto para pôr no lugar.
+      setStatus("Verificando os dados…");
+      const rel = analisarQualidade(tipo, abas);
+      setRelatorio(rel);
+
+      if (rel.temBloqueio) {
+        throw new Error(
+          "A planilha tem dados incorretos ou vazios que impedem a importação. " +
+          "Corrija na origem e envie novamente — nada foi alterado.",
+        );
+      }
+      // Só avisos: espera a confirmação explícita do usuário (o finally libera o botão).
+      if (rel.achados.length > 0 && !forcar) return;
 
       setStatus("Iniciando importação…");
       const ini = await post("/api/sada/importar", {
@@ -77,12 +111,11 @@ export default function AtualizacaoDivida() {
         setProgresso(Math.round((enviadas / totalLinhas) * 100));
       };
 
-      for (let i = 0; i < abas.length; i++) {
-        const { ano } = abas[i];
+      for (const { ano, linhas } of abas) {
         anoMin = Math.min(anoMin, ano); anoMax = Math.max(anoMax, ano);
         setStatus(`Enviando ${ano}…`);
-        for (const r of linhasPorAba[i]) {
-          buffer.push(mapearLinha(tipo, r as unknown[], { cnpj_orgao: cnpj.trim(), ano }));
+        for (const r of linhas) {
+          buffer.push(mapearLinha(tipo, r, { cnpj_orgao: cnpj.trim(), ano }));
           total++;
           if (buffer.length >= LOTE) await flush();
         }
@@ -95,6 +128,7 @@ export default function AtualizacaoDivida() {
       });
 
       setProgresso(100);
+      setRelatorio(null);
       setConcluido(`${total.toLocaleString("pt-BR")} linhas atualizadas (${anoMin}–${anoMax}).`);
     } catch (e) {
       setErro((e as Error).message);
@@ -123,7 +157,8 @@ export default function AtualizacaoDivida() {
       <section className="card" style={{ maxWidth: 560 }}>
         <div className="field">
           <label>Tipo de planilha</label>
-          <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoSada)} disabled={rodando}>
+          <select value={tipo} disabled={rodando}
+            onChange={(e) => { setTipo(e.target.value as TipoSada); resetarVerificacao(); }}>
             {TIPOS_SADA.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t]}</option>)}
           </select>
         </div>
@@ -137,7 +172,7 @@ export default function AtualizacaoDivida() {
         <div className="field">
           <label>Planilha (.xlsx)</label>
           <input type="file" accept=".xlsx" disabled={rodando}
-            onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+            onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); resetarVerificacao(); }} />
           <small>Uma aba por ano. O envio é feito em lotes — pode levar alguns minutos.</small>
         </div>
 
@@ -150,10 +185,46 @@ export default function AtualizacaoDivida() {
           </div>
         )}
 
+        {relatorio && relatorio.achados.length > 0 && (
+          <div className={`qualidade-relatorio ${relatorio.temBloqueio ? "bloqueio" : "aviso"}`}>
+            <strong>
+              {relatorio.temBloqueio
+                ? "Importação bloqueada — dados incorretos ou vazios na planilha"
+                : "Dados incorretos ou vazios encontrados"}
+            </strong>
+            <p className="detalhe">
+              {relatorio.totalLinhas.toLocaleString("pt-BR")} linhas verificadas.
+              {relatorio.temBloqueio
+                ? " Corrija os itens marcados como impeditivos e envie de novo."
+                : " Você pode importar mesmo assim — os avisos ficam registrados na tela de Qualidade."}
+            </p>
+            <ul>
+              {relatorio.achados.map((a) => (
+                <li key={a.codigo}>
+                  <span className={`tag ${a.severidade}`}>
+                    {a.severidade === "bloqueio" ? "impeditivo" : "aviso"}
+                  </span>{" "}
+                  {a.rotulo} — <strong>{a.qtd.toLocaleString("pt-BR")}</strong>
+                  {a.qtd === 1 ? " linha" : " linhas"}
+                  <br />
+                  <small>
+                    ex.: {a.exemplos.join("; ")}{a.qtd > a.exemplos.length ? "…" : ""}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="actions">
-          <button className="btn" onClick={atualizar} disabled={rodando}>
+          <button className="btn" onClick={() => atualizar()} disabled={rodando}>
             {rodando ? "Atualizando…" : "Atualizar dívida"}
           </button>
+          {relatorio && !relatorio.temBloqueio && relatorio.achados.length > 0 && !rodando && (
+            <button className="btn secondary" onClick={() => atualizar(true)}>
+              Importar mesmo assim
+            </button>
+          )}
           {erro && <span className="msg erro">{erro}</span>}
           {concluido && <span className="msg ok">✅ {concluido}</span>}
         </div>

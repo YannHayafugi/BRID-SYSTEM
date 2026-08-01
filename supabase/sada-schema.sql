@@ -187,7 +187,225 @@ create unique index if not exists idx_sada_mv_arrec
   on public.sada_mv_arrec_da (cnpj_orgao, ano_arrec, sigla);
 
 -- ---------------------------------------------------------------------
--- 6. RLS: habilitado (mesma postura das tabelas gp_). Sem políticas =
+-- 6. Qualidade dos dados — uma linha por verificação, sobre o lote vigente.
+--    Alimenta /sada/qualidade e o aviso no dashboard.
+--    `qtd` = linhas com o problema; `base` = linhas examinadas na tabela.
+--    Categorias: total_nulo | contribuinte | valor | campo_chave.
+-- ---------------------------------------------------------------------
+create or replace view public.sada_vw_qualidade as
+with da as (
+  select d.* from public.sada_divida_ativa d
+  join public.sada_importacoes i on i.id = d.importacao_id and i.vigente
+), lc as (
+  select l.* from public.sada_lancamentos l
+  join public.sada_importacoes i on i.id = l.importacao_id and i.vigente
+), rc as (
+  select r.* from public.sada_recebimentos r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+), rd as (
+  select r.* from public.sada_recebimentos_da r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+)
+select categoria, tabela, problema, qtd, base from (
+  -- DÍVIDA ATIVA
+  select 'total_nulo'::text  as categoria, 'divida_ativa'::text as tabela,
+         'Dívida Ativa — total nulo (só principal)'::text as problema,
+         count(*) filter (where total is null) as qtd,
+         (select count(*) from da) as base
+    from da
+  union all
+  select 'contribuinte', 'divida_ativa', 'Dívida Ativa — CNPJ/CPF zerado ou vazio',
+         count(*) filter (where cnpj_cpf is null or btrim(cnpj_cpf) = ''
+                             or regexp_replace(cnpj_cpf, '\D', '', 'g') ~ '^0+$'),
+         (select count(*) from da)
+    from da
+  union all
+  select 'valor', 'divida_ativa', 'Dívida Ativa — valor nulo ou ≤ 0',
+         count(*) filter (where valor is null or valor <= 0),
+         (select count(*) from da)
+    from da
+  union all
+  select 'campo_chave', 'divida_ativa', 'Dívida Ativa — sigla vazia',
+         count(*) filter (where sigla is null or btrim(sigla) = ''),
+         (select count(*) from da)
+    from da
+  union all
+  select 'campo_chave', 'divida_ativa', 'Dívida Ativa — inscrição vazia',
+         count(*) filter (where inscricao is null or btrim(inscricao) = ''),
+         (select count(*) from da)
+    from da
+  union all
+  select 'campo_chave', 'divida_ativa', 'Dívida Ativa — sequência nula',
+         count(*) filter (where sequencia is null),
+         (select count(*) from da)
+    from da
+  -- LANÇAMENTOS
+  union all
+  select 'valor', 'lancamentos', 'Lançamentos — valor nulo ou ≤ 0',
+         count(*) filter (where valor is null or valor <= 0),
+         (select count(*) from lc)
+    from lc
+  union all
+  select 'contribuinte', 'lancamentos', 'Lançamentos — CNPJ/CPF zerado ou vazio',
+         count(*) filter (where cnpj_cpf is null or btrim(cnpj_cpf) = ''
+                             or regexp_replace(cnpj_cpf, '\D', '', 'g') ~ '^0+$'),
+         (select count(*) from lc)
+    from lc
+  union all
+  select 'campo_chave', 'lancamentos', 'Lançamentos — sigla vazia',
+         count(*) filter (where sigla is null or btrim(sigla) = ''),
+         (select count(*) from lc)
+    from lc
+  union all
+  select 'campo_chave', 'lancamentos', 'Lançamentos — sequência nula',
+         count(*) filter (where sequencia is null),
+         (select count(*) from lc)
+    from lc
+  -- RECEBIMENTOS
+  union all
+  select 'valor', 'recebimentos', 'Recebimentos — totaldam nulo ou ≤ 0',
+         count(*) filter (where totaldam is null or totaldam <= 0),
+         (select count(*) from rc)
+    from rc
+  union all
+  select 'campo_chave', 'recebimentos', 'Recebimentos — sequência nula',
+         count(*) filter (where sequencia is null),
+         (select count(*) from rc)
+    from rc
+  -- RECEBIMENTOS DA
+  union all
+  select 'valor', 'recebimentos_da', 'Recebimentos DA — totaldam nulo ou ≤ 0',
+         count(*) filter (where totaldam is null or totaldam <= 0),
+         (select count(*) from rd)
+    from rd
+  union all
+  select 'campo_chave', 'recebimentos_da', 'Recebimentos DA — sequência nula',
+         count(*) filter (where sequencia is null),
+         (select count(*) from rd)
+    from rd
+) t
+order by qtd desc;
+
+-- ---------------------------------------------------------------------
+-- 7. Views analíticas — leem sempre o lote vigente (join em sada_importacoes
+--    com i.vigente). Consumidas por /api/sada/dashboard e pelos scripts.
+--    Ao contrário das materialized views da seção 5, não precisam de refresh.
+-- ---------------------------------------------------------------------
+
+-- Estoque de dívida ativa por ente / ano / tributo (principal e total)
+create or replace view public.sada_vw_estoque_ano as
+  select d.cnpj_orgao, d.ano, d.sigla,
+         count(*)     as qtd_titulos,
+         sum(d.valor) as principal,
+         sum(d.total) as total
+  from public.sada_divida_ativa d
+  join public.sada_importacoes i on i.id = d.importacao_id and i.vigente
+  group by d.cnpj_orgao, d.ano, d.sigla;
+
+-- Arrecadação anual, separando origem normal x dívida ativa
+create or replace view public.sada_vw_arrecadacao_ano as
+  select r.cnpj_orgao, 'normal'::text as origem, r.ano_arrec,
+         sum(r.totaldam) as valor
+  from public.sada_recebimentos r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+  group by r.cnpj_orgao, r.ano_arrec
+  union all
+  select r.cnpj_orgao, 'divida_ativa'::text, r.ano_arrec,
+         sum(r.totaldam)
+  from public.sada_recebimentos_da r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+  group by r.cnpj_orgao, r.ano_arrec;
+
+-- Mesma abertura da anterior, com mês e tributo (série mensal)
+create or replace view public.sada_vw_arrecadacao_mensal as
+  select r.cnpj_orgao, 'normal'::text as origem, r.ano_arrec, r.mes_arrec, r.sigla,
+         count(*)        as qtd,
+         sum(r.totaldam) as valor
+  from public.sada_recebimentos r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+  group by r.cnpj_orgao, r.ano_arrec, r.mes_arrec, r.sigla
+  union all
+  select r.cnpj_orgao, 'divida_ativa'::text, r.ano_arrec, r.mes_arrec, r.sigla,
+         count(*),
+         sum(r.totaldam)
+  from public.sada_recebimentos_da r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+  group by r.cnpj_orgao, r.ano_arrec, r.mes_arrec, r.sigla;
+
+-- Ranking de tributos: estoque somado + arrecadado de DA do mesmo tributo
+create or replace view public.sada_vw_ranking_tributos as
+  select e.cnpj_orgao, e.sigla,
+         sum(e.total) as estoque_total,
+         (select sum(r.totaldam)
+            from public.sada_recebimentos_da r
+            join public.sada_importacoes i2 on i2.id = r.importacao_id and i2.vigente
+           where r.cnpj_orgao = e.cnpj_orgao and r.sigla = e.sigla) as arrecadado_da
+  from public.sada_divida_ativa e
+  join public.sada_importacoes i on i.id = e.importacao_id and i.vigente
+  group by e.cnpj_orgao, e.sigla;
+
+-- Maiores devedores por contribuinte (ordenação fica a cargo do consumidor)
+create or replace view public.sada_vw_top_devedores as
+  select d.cnpj_orgao, d.cnpj_cpf,
+         count(*)     as qtd_titulos,
+         sum(d.total) as divida_total
+  from public.sada_divida_ativa d
+  join public.sada_importacoes i on i.id = d.importacao_id and i.vigente
+  where d.cnpj_cpf is not null
+  group by d.cnpj_orgao, d.cnpj_cpf;
+
+-- Taxa de recuperação por tributo: estoque remanescente x arrecadado de DA.
+-- FULL JOIN para não perder tributo que só existe de um dos lados.
+create or replace view public.sada_vw_recuperacao_da as
+with estoque as (
+  select d.cnpj_orgao, d.sigla, sum(d.total) as estoque_atual
+  from public.sada_divida_ativa d
+  join public.sada_importacoes i on i.id = d.importacao_id and i.vigente
+  group by d.cnpj_orgao, d.sigla
+), arrec as (
+  select r.cnpj_orgao, r.sigla, sum(r.totaldam) as arrecadado
+  from public.sada_recebimentos_da r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+  group by r.cnpj_orgao, r.sigla
+)
+select coalesce(e.cnpj_orgao, a.cnpj_orgao) as cnpj_orgao,
+       coalesce(e.sigla, a.sigla)           as sigla,
+       coalesce(e.estoque_atual, 0)         as estoque_atual,
+       coalesce(a.arrecadado, 0)            as arrecadado_da,
+       round(100 * coalesce(a.arrecadado, 0)
+             / nullif(coalesce(a.arrecadado, 0) + coalesce(e.estoque_atual, 0), 0), 2) as pct_recuperacao
+from estoque e
+full join arrec a on e.cnpj_orgao = a.cnpj_orgao and e.sigla = a.sigla;
+
+-- Entes que já importaram para o SADA mas ainda não existem em gp_orgaos
+-- (compara só os dígitos do CNPJ). Alimenta o KPI e scripts/sada-pendentes.ts.
+create or replace view public.sada_entes_pendentes as
+  select i.cnpj_orgao,
+         min(i.created_at) as primeira_importacao,
+         count(*)          as qtd_lotes
+  from public.sada_importacoes i
+  left join public.gp_orgaos o
+    on regexp_replace(coalesce(o.cnpj, ''), '\D', '', 'g') = regexp_replace(i.cnpj_orgao, '\D', '', 'g')
+  where o.id is null
+  group by i.cnpj_orgao;
+
+-- ---------------------------------------------------------------------
+-- 8. Refresh das materialized views da seção 5. Chamada via rpc pelo
+--    importador (scripts/sada-import.ts e /api/sada/importar/finalizar).
+--    security definer porque a API chega com role sem permissão de refresh.
+-- ---------------------------------------------------------------------
+create or replace function public.sada_refresh_mvs()
+returns void
+language sql
+security definer
+set search_path to 'public'
+as $$
+  refresh materialized view public.sada_mv_estoque_da;
+  refresh materialized view public.sada_mv_arrec_da;
+$$;
+
+-- ---------------------------------------------------------------------
+-- 9. RLS: habilitado (mesma postura das tabelas gp_). Sem políticas =
 --    acesso somente via service role na camada de API. Roles de view
 --    entram como políticas/checagens depois.
 -- ---------------------------------------------------------------------
@@ -206,5 +424,8 @@ alter table public.sada_recebimentos_da enable row level security;
 --   anterior (mesmo cnpj_orgao+tipo+ano) vigente=false, sem apagar.
 -- * Valores vêm como texto ('260.01','0.00','NULL') — importador converte
 --   para numeric/null e preenche cnpj_orgao + ano por lote.
--- * Após importar, rodar refresh das materialized views.
+-- * Após importar, rodar refresh das materialized views (rpc sada_refresh_mvs).
+-- * Dependência externa: sada_entes_pendentes lê public.gp_orgaos e
+--   sada_importacoes referencia public.gp_profiles — ambas vêm de
+--   schema-unificado.sql, que precisa rodar ANTES deste arquivo.
 -- =====================================================================
