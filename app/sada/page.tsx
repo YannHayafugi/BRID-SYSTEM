@@ -36,6 +36,7 @@ export default function SadaPage() {
   const [d, setD] = useState<Dados | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [qualidade, setQualidade] = useState<{ comProblema: number; totalOcorrencias: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/sada/dashboard")
@@ -48,6 +49,12 @@ export default function SadaPage() {
       })
       .catch((e) => setErro(e.message))
       .finally(() => setCarregando(false));
+
+    // Aviso de qualidade dos dados (não bloqueia o dashboard).
+    fetch("/api/sada/qualidade")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setQualidade(j.resumo))
+      .catch(() => {});
   }, []);
 
   if (carregando) return <main className="sada-wrap"><p className="vazio">Carregando análises…</p></main>;
@@ -66,6 +73,13 @@ export default function SadaPage() {
         </div>
         <Link href="/" className="landing-cta secundario">← Hub</Link>
       </header>
+
+      {qualidade && qualidade.comProblema > 0 && (
+        <Link href="/sada/qualidade" className="sada-aviso-qualidade">
+          ⚠ {qualidade.totalOcorrencias.toLocaleString("pt-BR")} ocorrências de dados incorretos ou vazios
+          em {qualidade.comProblema} verificações — ver detalhes →
+        </Link>
+      )}
 
       {/* KPIs */}
       <div className="dash-kpis">

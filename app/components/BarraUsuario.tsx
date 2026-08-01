@@ -82,6 +82,7 @@ export default function BarraUsuario() {
   const abas = emSada
     ? [
         { href: "/sada", rotulo: "Dashboard", exact: true },
+        { href: "/sada/qualidade", rotulo: "Qualidade" },
         { href: "/sada/atualizacao", rotulo: "Atualização da Dívida" },
       ]
     : [
