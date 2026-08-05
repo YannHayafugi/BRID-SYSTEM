@@ -9,13 +9,25 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
-  analisarQualidade, linhaVazia, mapearLinha, RelatorioQualidade,
+  analisarQualidade, linhaVazia, RelatorioQualidade,
   ROTULO_TIPO, TIPOS_SADA, TipoSada,
 } from "@/lib/sada/import";
+import {
+  AbaEscolhida, AbasModo, compilarMapa, compilarValores, Mapa,
+} from "@/lib/sada/depara";
 
 const LOTE = 1000;
 
-interface Aba { ano: number; linhas: unknown[][] }
+/** Linhas cruas de uma aba, já sem o cabeçalho (que fica em `cabecalho`). */
+interface Aba { ano: number; cabecalho: string[]; linhas: unknown[][] }
+
+interface ConfigDePara {
+  mapa: Mapa;
+  abasModo: AbasModo;
+  abas: AbaEscolhida[] | null;
+  padrao: boolean;
+  pares: { campo: string; valor_origem: string; valor_canonico: string }[];
+}
 
 export default function AtualizacaoDivida() {
   const [tipo, setTipo] = useState<TipoSada>("divida_ativa");
@@ -28,26 +40,67 @@ export default function AtualizacaoDivida() {
   const [concluido, setConcluido] = useState<string | null>(null);
   const [relatorio, setRelatorio] = useState<RelatorioQualidade | null>(null);
   // Planilha já lida — evita reprocessar o arquivo ao confirmar os avisos.
-  const cache = useRef<{ arquivo: File; tipo: TipoSada; abas: Aba[] } | null>(null);
+  // O CNPJ entra na chave porque o DE/PARA (e com ele o recorte de abas) é
+  // por ente: trocar de ente precisa reler o arquivo.
+  const cache = useRef<{ arquivo: File; tipo: TipoSada; cnpj: string; abas: Aba[] } | null>(null);
 
   /** Troca de arquivo/tipo invalida a verificação anterior. */
   function resetarVerificacao() {
     setRelatorio(null); setErro(""); setConcluido(null);
   }
 
-  async function lerPlanilha(f: File, t: TipoSada): Promise<Aba[]> {
+  /** Busca o DE/PARA do ente. Sem cadastro a API devolve o layout posicional
+   *  padrão (`padrao: true`), então esta tela funciona igual para ente antigo. */
+  async function carregarDePara(cnpjLimpo: string, t: TipoSada): Promise<ConfigDePara> {
+    const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(cnpjLimpo)}&tipo=${t}`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.erro || "Falha ao carregar o DE/PARA do ente.");
+
+    const rv = await fetch(`/api/sada/depara/valores?cnpj=${encodeURIComponent(cnpjLimpo)}`);
+    const jv = await rv.json().catch(() => ({ pares: [] }));
+
+    return {
+      mapa: j.depara.mapa ?? {},
+      abasModo: j.depara.abas_modo ?? "ano_no_nome",
+      abas: j.depara.abas ?? null,
+      padrao: !!j.padrao,
+      pares: rv.ok ? (jv.pares ?? []) : [],
+    };
+  }
+
+  /**
+   * Lê as abas conforme o modo declarado no DE/PARA. O cabeçalho deixa de ser
+   * descartado: com layout variável, é ele que resolve nome de coluna -> índice.
+   */
+  async function lerPlanilha(f: File, t: TipoSada, cfg: ConfigDePara, cnpjLimpo: string): Promise<Aba[]> {
     const c = cache.current;
-    if (c && c.arquivo === f && c.tipo === t) return c.abas;
-    const buf = await f.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const abas: Aba[] = wb.SheetNames
-      .map((nome) => ({ nome, ano: parseInt(nome, 10) }))
-      .filter((a) => Number.isFinite(a.ano))
-      .map(({ nome, ano }) => {
-        const m = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: false });
-        return { ano, linhas: m.slice(1).filter((r) => !linhaVazia(r as unknown[])) as unknown[][] };
-      });
-    cache.current = { arquivo: f, tipo: t, abas };
+    if (c && c.arquivo === f && c.tipo === t && c.cnpj === cnpjLimpo) return c.abas;
+
+    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+
+    // Quais abas entram e que ano cada uma representa.
+    const escolhidas: { nome: string; ano: number }[] =
+      cfg.abasModo === "abas_escolhidas"
+        ? (cfg.abas ?? []).filter((a) => wb.SheetNames.includes(a.nome))
+        : wb.SheetNames
+            .map((nome) => ({ nome, ano: parseInt(nome, 10) }))
+            .filter((a) => Number.isFinite(a.ano));
+
+    if (escolhidas.length === 0) {
+      throw new Error(
+        cfg.abasModo === "abas_escolhidas"
+          ? "Nenhuma das abas configuradas no DE/PARA existe neste arquivo."
+          : "Nenhuma aba com nome de ano. Se este ente usa outro formato, configure em DE/PARA.",
+      );
+    }
+
+    const abas: Aba[] = escolhidas.map(({ nome, ano }) => {
+      const m = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: false }) as unknown[][];
+      const cabecalho = (m[0] ?? []).map((v) => String(v ?? "").trim());
+      return { ano, cabecalho, linhas: m.slice(1).filter((r) => !linhaVazia(r)) };
+    });
+
+    cache.current = { arquivo: f, tipo: t, cnpj: cnpjLimpo, abas };
     return abas;
   }
 
@@ -74,15 +127,52 @@ export default function AtualizacaoDivida() {
     let anoMin = Infinity, anoMax = -Infinity;
 
     try {
-      const abas = await lerPlanilha(arquivo, tipo);
+      const cnpjLimpo = cnpj.trim();
+
+      setStatus("Carregando o DE/PARA do ente…");
+      const cfg = await carregarDePara(cnpjLimpo, tipo);
+
+      const abas = await lerPlanilha(arquivo, tipo, cfg, cnpjLimpo);
       const totalLinhas = abas.reduce((s, a) => s + a.linhas.length, 0);
       if (totalLinhas === 0) throw new Error("A planilha não tem linhas de dados.");
+
+      // Um compilado por aba: o cabeçalho pode variar de uma aba para outra.
+      const compilados = abas.map((a) => compilarMapa(tipo, cfg.mapa, a.cabecalho));
+      const valores = compilarValores(
+        cfg.pares.filter((p) => p.campo === "sigla" || p.campo === "fase") as
+          { campo: "sigla" | "fase"; valor_origem: string; valor_canonico: string }[],
+      );
+
+      /** Linha crua -> registro pronto para o banco, já com o DE/PARA de valores. */
+      const traduzir = (iAba: number, linha: unknown[], ano: number) => {
+        const reg = compilados[iAba].aplicar(linha);
+        if ("sigla" in reg) reg.sigla = valores.aplicar("sigla", reg.sigla);
+        if ("fase" in reg) reg.fase = valores.aplicar("fase", reg.fase);
+        reg.cnpj_orgao = cnpjLimpo;
+        reg.ano = ano;
+        return reg;
+      };
+
+      const unicos = (xs: string[]) => Array.from(new Set(xs));
 
       // Verificação de qualidade ANTES de abrir o lote: /api/sada/importar já
       // marca a importação anterior como não-vigente, então uma planilha ruim
       // derrubaria o retrato atual sem ter nada correto para pôr no lugar.
-      setStatus("Verificando os dados…");
-      const rel = analisarQualidade(tipo, abas);
+      setStatus("Traduzindo e verificando os dados…");
+      const rel = analisarQualidade(
+        tipo,
+        abas.map((a, i) => ({
+          ano: a.ano,
+          // gerador: traduz sob demanda, sem materializar o arquivo convertido
+          registros: (function* () {
+            for (const l of a.linhas) yield traduzir(i, l, a.ano);
+          })(),
+        })),
+        {
+          faltando: unicos(compilados.flatMap((c) => c.faltando)),
+          origensAusentes: unicos(compilados.flatMap((c) => c.origensAusentes)),
+        },
+      );
       setRelatorio(rel);
 
       if (rel.temBloqueio) {
@@ -111,11 +201,12 @@ export default function AtualizacaoDivida() {
         setProgresso(Math.round((enviadas / totalLinhas) * 100));
       };
 
-      for (const { ano, linhas } of abas) {
+      for (let i = 0; i < abas.length; i++) {
+        const { ano, linhas } = abas[i];
         anoMin = Math.min(anoMin, ano); anoMax = Math.max(anoMax, ano);
         setStatus(`Enviando ${ano}…`);
         for (const r of linhas) {
-          buffer.push(mapearLinha(tipo, r, { cnpj_orgao: cnpj.trim(), ano }));
+          buffer.push(traduzir(i, r, ano));
           total++;
           if (buffer.length >= LOTE) await flush();
         }

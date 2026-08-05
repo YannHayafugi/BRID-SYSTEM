@@ -83,6 +83,7 @@ export default function BarraUsuario() {
     ? [
         { href: "/sada", rotulo: "Dashboard", exact: true },
         { href: "/sada/qualidade", rotulo: "Qualidade" },
+        { href: "/sada/depara", rotulo: "DE/PARA" },
         { href: "/sada/atualizacao", rotulo: "Atualização da Dívida" },
       ]
     : [

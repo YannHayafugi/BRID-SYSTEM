@@ -548,3 +548,60 @@ textarea {
 [data-theme="dark"] .qualidade-relatorio.bloqueio {
   background: #3a1f1f; border-color: #6b2c2c; color: #f0a3a3;
 }
+
+/* ---------------------------------------------------------------------
+   SADA · DE/PARA
+   Filtros em linha (CNPJ + tipo + ação) e abas Colunas/Valores.
+   As tags obrigatório/recomendado reaproveitam o visual do relatório de
+   qualidade, mas aqui vivem dentro de tabela — por isso o seletor próprio.
+   --------------------------------------------------------------------- */
+.depara-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.depara-filtros .field { margin: 0; flex: 1 1 180px; }
+
+.depara-abas {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--borda);
+}
+.depara-abas button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.82rem;
+  color: var(--texto);
+  opacity: 0.6;
+}
+.depara-abas button.ativa {
+  opacity: 1;
+  color: var(--primaria);
+  border-bottom-color: var(--primaria);
+}
+
+.sada-tabela .tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  vertical-align: middle;
+}
+.sada-tabela .tag.aviso    { background: #b57d18; }
+.sada-tabela .tag.bloqueio { background: #b23c3c; }
+.sada-tabela select,
+.sada-tabela input[type="text"],
+.sada-tabela input:not([type]) { width: 100%; min-width: 130px; }
