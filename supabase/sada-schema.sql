@@ -450,7 +450,71 @@ create index if not exists idx_sada_depara_valor_ente
   on public.sada_depara_valor (cnpj_orgao, campo);
 
 -- ---------------------------------------------------------------------
--- 10. RLS: habilitado (mesma postura das tabelas gp_). Sem políticas =
+-- 10. Insumos da previsão orçamentária (/api/sada/previsao).
+--     Entregam dados calibráveis, não a projeção — o cálculo roda no
+--     navegador para a tela responder a cada ajuste de parâmetro.
+--     Fórmulas e limites: docs/SADA-PREVISAO-ORCAMENTARIA.md
+-- ---------------------------------------------------------------------
+
+-- Estoque em aberto por safra de inscrição.
+-- `total` só existe nas safras em que a planilha trouxe encargos — nesta base,
+-- 2 de 11. É dessas duas que sai a taxa de encargos, pela razão entre as razões
+-- total/principal, que cancela a data (desconhecida) da foto.
+-- titulos/contribuintes alimentam o detector de quebra estrutural.
+create or replace view public.sada_vw_prev_safras as
+  select d.ano,
+         count(*)                   as titulos,
+         count(distinct d.cnpj_cpf) as contribuintes,
+         sum(d.valor)               as principal,
+         sum(d.total)               as total
+  from public.sada_divida_ativa d
+  join public.sada_importacoes i on i.id = d.importacao_id and i.vigente
+  group by d.ano;
+
+-- Distribuição do recuperado por idade da dívida.
+-- Sem join por sequencia: título pago sai do estoque, então os conjuntos são
+-- disjuntos por construção (verificado — 67.897 recebimentos, zero casaram).
+-- A idade vem de ano_arrec - ano_venc; a janela 0..20 corta ano invertido.
+create or replace view public.sada_vw_prev_curva as
+  select (r.ano_arrec - r.ano_venc) as idade,
+         count(*)                   as pagamentos,
+         sum(r.totaldam)            as valor
+  from public.sada_recebimentos_da r
+  join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+  where r.ano_arrec is not null and r.ano_venc is not null
+    and (r.ano_arrec - r.ano_venc) between 0 and 20
+  group by 1;
+
+-- Séries anuais de fluxo. O filtro de ano descarta resíduo obviamente errado
+-- (a base tem linhas em 1899 e 2041) sem depender de constante por ente.
+create or replace view public.sada_vw_prev_series as
+  with lanc as (
+    select l.ano, sum(l.valor) as lancado
+    from public.sada_lancamentos l
+    join public.sada_importacoes i on i.id = l.importacao_id and i.vigente
+    where l.ano between 2000 and extract(year from now())::int + 1
+    group by l.ano
+  ), rec as (
+    select r.ano_arrec as ano, sum(r.totaldam) as arrecadado_normal
+    from public.sada_recebimentos r
+    join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+    where r.ano_arrec between 2000 and extract(year from now())::int + 1
+    group by r.ano_arrec
+  ), recda as (
+    select r.ano_arrec as ano, sum(r.totaldam) as arrecadado_da
+    from public.sada_recebimentos_da r
+    join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
+    where r.ano_arrec between 2000 and extract(year from now())::int + 1
+    group by r.ano_arrec
+  )
+  select coalesce(l.ano, rc.ano, rd.ano) as ano,
+         l.lancado, rc.arrecadado_normal, rd.arrecadado_da
+  from lanc l
+  full join rec   rc on rc.ano = l.ano
+  full join recda rd on rd.ano = coalesce(l.ano, rc.ano);
+
+-- ---------------------------------------------------------------------
+-- 11. RLS: habilitado (mesma postura das tabelas gp_). Sem políticas =
 --    acesso somente via service role na camada de API. Roles de view
 --    entram como políticas/checagens depois.
 -- ---------------------------------------------------------------------

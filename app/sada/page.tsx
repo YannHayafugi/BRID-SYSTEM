@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BarrasHorizontais, BarrasMensais } from "@/app/components/DashboardCharts";
+import PrevisaoOrcamentaria from "@/app/components/PrevisaoOrcamentaria";
 
 interface Dados {
   kpis: {
@@ -135,6 +136,9 @@ export default function SadaPage() {
           <h2>Arrecadação de DA por ano (R$ mi)</h2>
           <BarrasMensais dados={d.arrecadacaoPorAno.map((a) => ({ rotulo: String(a.ano), valor: milhoes(a.da) }))} />
         </section>
+
+        {/* Previsão orçamentária — 10 exercícios */}
+        <PrevisaoOrcamentaria />
 
         {/* Top devedores */}
         <section className="card sada-col-2">

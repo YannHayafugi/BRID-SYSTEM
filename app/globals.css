@@ -605,3 +605,46 @@ textarea {
 .sada-tabela select,
 .sada-tabela input[type="text"],
 .sada-tabela input:not([type]) { width: 100%; min-width: 130px; }
+
+/* ---------------------------------------------------------------------
+   SADA · Previsão orçamentária
+   Barra em duas camadas: a clara é o intervalo conservador–otimista, a
+   cheia é o cenário base. Mostra a incerteza sem precisar de biblioteca.
+   --------------------------------------------------------------------- */
+.prev-grafico {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 180px;
+  margin: 12px 0 4px;
+  padding-top: 8px;
+}
+.prev-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+.prev-faixa {
+  width: 100%;
+  background: color-mix(in srgb, var(--primaria) 22%, transparent);
+  border-radius: 3px 3px 0 0;
+  display: flex;
+  align-items: flex-end;
+  min-height: 2px;
+}
+.prev-base {
+  width: 100%;
+  background: var(--primaria);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+.prev-rotulo {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-top: 4px;
+  white-space: nowrap;
+}
