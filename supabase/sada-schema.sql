@@ -400,7 +400,57 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------
--- 9. RLS: habilitado (mesma postura das tabelas gp_). Sem políticas =
+-- 9. DE/PARA — cada ente manda a planilha no layout do seu próprio sistema
+--    de origem. Estas tabelas guardam a tradução; o importador deixa de ler
+--    por posição fixa e passa a interpretar o mapa.
+--
+--    Sem linha aqui, o importador cai no MAPA_PADRAO de lib/sada/depara.ts
+--    (o layout posicional histórico) — por isso não há seed: ente antigo
+--    continua importando sem nenhum cadastro.
+-- ---------------------------------------------------------------------
+
+-- Mapa de COLUNAS: um por ente + tipo de planilha.
+create table if not exists public.sada_depara (
+  id            bigint generated always as identity primary key,
+  cnpj_orgao    text not null,
+  tipo          text not null check (tipo in
+                  ('divida_ativa', 'lancamentos', 'recebimentos', 'recebimentos_da')),
+  -- Como as abas viram o campo `ano`:
+  --   ano_no_nome      = nome da aba é o ano (formato histórico)
+  --   abas_escolhidas  = usuário marca quais abas entram e o ano de cada uma
+  abas_modo     text not null default 'ano_no_nome'
+                  check (abas_modo in ('ano_no_nome', 'abas_escolhidas')),
+  abas          jsonb,                          -- [{"nome":"Plan1","ano":2024}]
+  -- campo destino -> {"origem": <nome da coluna|índice>, "transform": "..."}
+  --                | {"constante": <valor>}
+  -- `transform` só aparece quando difere do tipo natural do campo destino
+  -- (ex.: data_mes/data_ano, que extraem de uma única coluna de data).
+  mapa          jsonb not null default '{}'::jsonb,
+  observacao    text,
+  criado_por    uuid references public.gp_profiles (id),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  unique (cnpj_orgao, tipo)
+);
+
+-- DE/PARA de VALORES: normaliza o vocabulário do ente para o canônico.
+-- Escopo é o ente inteiro (sem `tipo`) de propósito: a sigla precisa casar
+-- entre dívida ativa, lançamentos e recebimentos, senão o ranking fragmenta.
+-- `valor_origem` é gravado já normalizado (upper + trim) — ver lib/sada/depara.ts.
+create table if not exists public.sada_depara_valor (
+  id             bigint generated always as identity primary key,
+  cnpj_orgao     text not null,
+  campo          text not null default 'sigla' check (campo in ('sigla', 'fase')),
+  valor_origem   text not null,
+  valor_canonico text not null,
+  created_at     timestamptz not null default now(),
+  unique (cnpj_orgao, campo, valor_origem)
+);
+create index if not exists idx_sada_depara_valor_ente
+  on public.sada_depara_valor (cnpj_orgao, campo);
+
+-- ---------------------------------------------------------------------
+-- 10. RLS: habilitado (mesma postura das tabelas gp_). Sem políticas =
 --    acesso somente via service role na camada de API. Roles de view
 --    entram como políticas/checagens depois.
 -- ---------------------------------------------------------------------
@@ -409,6 +459,8 @@ alter table public.sada_divida_ativa   enable row level security;
 alter table public.sada_lancamentos    enable row level security;
 alter table public.sada_recebimentos   enable row level security;
 alter table public.sada_recebimentos_da enable row level security;
+alter table public.sada_depara         enable row level security;
+alter table public.sada_depara_valor   enable row level security;
 
 -- =====================================================================
 -- Notas:

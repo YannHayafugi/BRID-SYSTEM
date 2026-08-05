@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "sada:import": "tsx scripts/sada-import.ts",
-    "sada:pendentes": "tsx scripts/sada-pendentes.ts"
+    "sada:pendentes": "tsx scripts/sada-pendentes.ts",
+    "sada:teste-depara": "tsx scripts/sada-depara-teste.ts"
   },
   "dependencies": {
     "next": "14.2.35",
