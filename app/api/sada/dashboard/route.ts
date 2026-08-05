@@ -24,8 +24,12 @@ export async function GET() {
   const num = (v: unknown) => Number(v ?? 0);
 
   const [recuperacao, estoqueAno, arrecAno, ranking, devedores, pendentes] = await Promise.all([
-    sb.from("sada_vw_recuperacao_da").select("sigla, estoque_atual, arrecadado_da, pct_recuperacao"),
-    sb.from("sada_vw_estoque_ano").select("ano, total"),
+    // Base PRINCIPAL nos dois lados. O campo `total` (com encargos) só existe
+    // em parte das safras — somá-lo descartava silenciosamente o resto.
+    // `arrecadado_caixa` é o valor efetivamente recebido, com encargos.
+    sb.from("sada_vw_recuperacao_da")
+      .select("sigla, estoque_atual, arrecadado_da, pct_recuperacao, arrecadado_caixa"),
+    sb.from("sada_vw_estoque_ano").select("ano, principal"),
     sb.from("sada_vw_arrecadacao_ano").select("origem, ano_arrec, valor"),
     sb.from("sada_vw_ranking_tributos").select("sigla, estoque_total, arrecadado_da"),
     sb.from("sada_vw_top_devedores").select("cnpj_cpf, divida_total, qtd_titulos")
@@ -38,10 +42,10 @@ export async function GET() {
     return NextResponse.json({ erro: err.error.message }, { status: 500 });
   }
 
-  // Estoque por ano (soma dos tributos)
+  // Estoque por ano (soma dos tributos), em principal
   const estoquePorAnoMap = new Map<number, number>();
   for (const r of estoqueAno.data ?? []) {
-    estoquePorAnoMap.set(num(r.ano), (estoquePorAnoMap.get(num(r.ano)) ?? 0) + num(r.total));
+    estoquePorAnoMap.set(num(r.ano), (estoquePorAnoMap.get(num(r.ano)) ?? 0) + num(r.principal));
   }
   const estoquePorAno = Array.from(estoquePorAnoMap, ([ano, total]) => ({ ano, total }))
     .sort((a, b) => a.ano - b.ano);
@@ -64,6 +68,7 @@ export async function GET() {
       sigla: r.sigla as string,
       estoque: num(r.estoque_atual),
       arrecadado: num(r.arrecadado_da),
+      caixa: num(r.arrecadado_caixa),
       pct: num(r.pct_recuperacao),
     }))
     .sort((a, b) => b.estoque + b.arrecadado - (a.estoque + a.arrecadado));
@@ -78,11 +83,13 @@ export async function GET() {
     titulos: num(r.qtd_titulos),
   }));
 
-  // KPIs globais
+  // KPIs globais. A taxa compara principal com principal; o valor exibido como
+  // "recuperado" é o caixa (com encargos), que é o que de fato entrou.
   const estoqueTotal = recuperacaoPorTributo.reduce((s, r) => s + r.estoque, 0);
-  const arrecadadoTotal = recuperacaoPorTributo.reduce((s, r) => s + r.arrecadado, 0);
-  const recuperacaoGlobal = estoqueTotal + arrecadadoTotal > 0
-    ? Math.round((10000 * arrecadadoTotal) / (arrecadadoTotal + estoqueTotal)) / 100
+  const arrecadadoPrincipal = recuperacaoPorTributo.reduce((s, r) => s + r.arrecadado, 0);
+  const arrecadadoTotal = recuperacaoPorTributo.reduce((s, r) => s + r.caixa, 0);
+  const recuperacaoGlobal = estoqueTotal + arrecadadoPrincipal > 0
+    ? Math.round((10000 * arrecadadoPrincipal) / (arrecadadoPrincipal + estoqueTotal)) / 100
     : 0;
 
   return NextResponse.json({

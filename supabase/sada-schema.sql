@@ -327,11 +327,17 @@ create or replace view public.sada_vw_arrecadacao_mensal as
   join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
   group by r.cnpj_orgao, r.ano_arrec, r.mes_arrec, r.sigla;
 
+-- ATENÇÃO À BASE: as três views abaixo somam `valor` (PRINCIPAL), não `total`.
+-- `total` = principal + encargos só vem preenchido em parte das safras (nesta
+-- base, 2 de 11). Somar `total` descartava silenciosamente as demais: o estoque
+-- aparecia como R$ 35,7 mi contra R$ 76,2 mi reais, e 1.583 devedores (14,9%)
+-- ficavam zerados no ranking. Principal está em 100% das linhas.
+
 -- Ranking de tributos: estoque somado + arrecadado de DA do mesmo tributo
 create or replace view public.sada_vw_ranking_tributos as
   select e.cnpj_orgao, e.sigla,
-         sum(e.total) as estoque_total,
-         (select sum(r.totaldam)
+         sum(e.valor) as estoque_total,
+         (select sum(r.valor)
             from public.sada_recebimentos_da r
             join public.sada_importacoes i2 on i2.id = r.importacao_id and i2.vigente
            where r.cnpj_orgao = e.cnpj_orgao and r.sigla = e.sigla) as arrecadado_da
@@ -343,7 +349,7 @@ create or replace view public.sada_vw_ranking_tributos as
 create or replace view public.sada_vw_top_devedores as
   select d.cnpj_orgao, d.cnpj_cpf,
          count(*)     as qtd_titulos,
-         sum(d.total) as divida_total
+         sum(d.valor) as divida_total
   from public.sada_divida_ativa d
   join public.sada_importacoes i on i.id = d.importacao_id and i.vigente
   where d.cnpj_cpf is not null
@@ -351,24 +357,32 @@ create or replace view public.sada_vw_top_devedores as
 
 -- Taxa de recuperação por tributo: estoque remanescente x arrecadado de DA.
 -- FULL JOIN para não perder tributo que só existe de um dos lados.
+-- A taxa compara PRINCIPAL com PRINCIPAL — comparar arrecadação com encargos
+-- (totaldam) contra estoque sem eles inflaria o percentual. O caixa efetivo
+-- fica em `arrecadado_caixa`, última coluna porque `create or replace view`
+-- só admite acrescentar coluna no fim.
 create or replace view public.sada_vw_recuperacao_da as
 with estoque as (
-  select d.cnpj_orgao, d.sigla, sum(d.total) as estoque_atual
+  select d.cnpj_orgao, d.sigla, sum(d.valor) as estoque_principal
   from public.sada_divida_ativa d
   join public.sada_importacoes i on i.id = d.importacao_id and i.vigente
   group by d.cnpj_orgao, d.sigla
 ), arrec as (
-  select r.cnpj_orgao, r.sigla, sum(r.totaldam) as arrecadado
+  select r.cnpj_orgao, r.sigla,
+         sum(r.valor)    as arrecadado_principal,
+         sum(r.totaldam) as arrecadado_caixa
   from public.sada_recebimentos_da r
   join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
   group by r.cnpj_orgao, r.sigla
 )
-select coalesce(e.cnpj_orgao, a.cnpj_orgao) as cnpj_orgao,
-       coalesce(e.sigla, a.sigla)           as sigla,
-       coalesce(e.estoque_atual, 0)         as estoque_atual,
-       coalesce(a.arrecadado, 0)            as arrecadado_da,
-       round(100 * coalesce(a.arrecadado, 0)
-             / nullif(coalesce(a.arrecadado, 0) + coalesce(e.estoque_atual, 0), 0), 2) as pct_recuperacao
+select coalesce(e.cnpj_orgao, a.cnpj_orgao)   as cnpj_orgao,
+       coalesce(e.sigla, a.sigla)             as sigla,
+       coalesce(e.estoque_principal, 0)       as estoque_atual,
+       coalesce(a.arrecadado_principal, 0)    as arrecadado_da,
+       round(100 * coalesce(a.arrecadado_principal, 0)
+             / nullif(coalesce(a.arrecadado_principal, 0)
+                    + coalesce(e.estoque_principal, 0), 0), 2) as pct_recuperacao,
+       coalesce(a.arrecadado_caixa, 0)        as arrecadado_caixa
 from estoque e
 full join arrec a on e.cnpj_orgao = a.cnpj_orgao and e.sigla = a.sigla;
 
