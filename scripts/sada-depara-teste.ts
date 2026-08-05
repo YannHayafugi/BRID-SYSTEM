@@ -1,5 +1,5 @@
 /** Conferência do DE/PARA contra o comportamento posicional atual. */
-import { mapearLinha, TIPOS_SADA, TipoSada } from "../lib/sada/import";
+import { analisarQualidade, mapearLinha, TIPOS_SADA, TipoSada } from "../lib/sada/import";
 import {
   compilarMapa, MAPA_PADRAO, sugerirMapa, compilarValores, parseData, numero,
 } from "../lib/sada/depara";
@@ -103,6 +103,57 @@ ok("I.P.T.U. -> IPTU", tv.aplicar("sigla", "I.P.T.U.") === "IPTU");
 ok("case/espaco insensivel", tv.aplicar("sigla", " i.p.t.u. ") === "IPTU");
 ok("sem par passa direto", tv.aplicar("sigla", "ISS") === "ISS");
 ok("null passa direto", tv.aplicar("sigla", null) === null);
+
+// ---------------------------------------------------------------------
+// 5. Qualidade sobre registros já traduzidos
+// ---------------------------------------------------------------------
+console.log("\n5. analisarQualidade pos-traducao");
+
+const regs = (n: number, extra: Record<string, unknown> = {}) =>
+  Array.from({ length: n }, () => ({
+    sequencia: 1, sigla: "IPTU", inscricao: "I-1", cnpj_cpf: "12345678901",
+    valor: 10, total: 12, ...extra,
+  }));
+
+// campo obrigatorio sem origem -> bloqueio (substituiu a contagem de colunas)
+const relFaltando = analisarQualidade(
+  "divida_ativa",
+  [{ ano: 2024, registros: regs(3) }],
+  { faltando: ["sigla"], origensAusentes: [] },
+);
+ok("faltando obrigatorio vira bloqueio", relFaltando.temBloqueio);
+
+// coluna do mapa que nao existe no arquivo -> bloqueio
+const relAusente = analisarQualidade(
+  "divida_ativa",
+  [{ ano: 2024, registros: regs(3) }],
+  { faltando: [], origensAusentes: ["VLR_TOTAL"] },
+);
+ok("origem ausente vira bloqueio", relAusente.temBloqueio);
+
+// sequencia nula agora e AVISO (era bloqueio) — decisao: importar sem a chave
+const relSemSeq = analisarQualidade(
+  "divida_ativa",
+  [{ ano: 2024, registros: regs(3, { sequencia: null }) }],
+);
+ok("sequencia nula nao bloqueia", !relSemSeq.temBloqueio);
+ok("sequencia nula aparece como aviso",
+  relSemSeq.achados.some((a) => a.codigo === "sequencia_nula" && a.severidade === "aviso"),
+  JSON.stringify(relSemSeq.achados.map((a) => [a.codigo, a.severidade])));
+
+// sigla vazia continua bloqueando
+const relSemSigla = analisarQualidade(
+  "divida_ativa",
+  [{ ano: 2024, registros: regs(3, { sigla: "" }) }],
+);
+ok("sigla vazia continua bloqueio", relSemSigla.temBloqueio);
+
+// o gerador e consumido uma vez so e conta todas as linhas
+const relGerador = analisarQualidade("divida_ativa", [{
+  ano: 2024,
+  registros: (function* () { for (const r of regs(7, { sequencia: null })) yield r; })(),
+}]);
+ok("gerador contabiliza as 7 linhas", relGerador.totalLinhas === 7, String(relGerador.totalLinhas));
 
 // ---------------------------------------------------------------------
 console.log(falhas === 0 ? "\nTUDO OK" : `\n${falhas} FALHA(S)`);

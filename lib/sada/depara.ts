@@ -463,11 +463,11 @@ export interface TabelaValores {
 /** Indexa os pares por (campo, valor normalizado). Valor sem par passa direto. */
 export function compilarValores(pares: ParValor[]): TabelaValores {
   const idx = new Map<string, string>();
-  for (const p of pares) idx.set(`${p.campo} ${chaveValor(p.valor_origem)}`, p.valor_canonico);
+  for (const p of pares) idx.set(`${p.campo}\u0000${chaveValor(p.valor_origem)}`, p.valor_canonico);
   return {
     aplicar(campo, valor) {
       if (valor === null || valor === undefined) return valor;
-      return idx.get(`${campo} ${chaveValor(valor)}`) ?? valor;
+      return idx.get(`${campo}\u0000${chaveValor(valor)}`) ?? valor;
     },
   };
 }

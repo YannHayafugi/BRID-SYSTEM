@@ -86,17 +86,15 @@ export function linhaVazia(r: unknown[]): boolean {
 // segue o que a base real já contém (ver view sada_vw_qualidade): CNPJ/CPF
 // zerado e total nulo são comuns nos arquivos do ente e NÃO podem barrar a
 // carga — viram aviso. Bloqueio fica para o que quebra as junções e para
-// planilha trocada (contagem de colunas), caso em que importar destruiria a
-// vigência do lote anterior sem nada correto para pôr no lugar.
+// planilha trocada, caso em que importar destruiria a vigência do lote
+// anterior sem nada correto para pôr no lugar.
+//
+// A análise roda sobre registros JÁ TRADUZIDOS pelo DE/PARA (lib/sada/depara),
+// e não sobre a linha crua: com layout variável por cliente, "a coluna 8 é o
+// valor" deixou de ser verdade. A detecção de planilha trocada, que antes
+// comparava a contagem de colunas, virou "campo obrigatório sem origem" —
+// informada por quem compilou o mapa.
 // =====================================================================
-
-/** Nº de colunas de origem por tipo — usado para detectar planilha trocada. */
-export const COLUNAS_ESPERADAS: Record<TipoSada, number> = {
-  divida_ativa: 13,
-  lancamentos: 9,
-  recebimentos: 18,
-  recebimentos_da: 18,
-};
 
 export type Severidade = "bloqueio" | "aviso";
 
@@ -116,9 +114,14 @@ const docZerado = (v: unknown) =>
 /** Regras comuns a todas as planilhas. */
 const REGRAS_COMUNS: RegraQualidade[] = [
   {
+    // Era bloqueio quando todo ente mandava o mesmo layout. Com DE/PARA há
+    // cliente cujo sistema simplesmente não exporta essa chave — barrar
+    // impediria a importação inteira. Sem ela os dados entram e todas as
+    // views atuais funcionam (nenhuma usa sequencia); o que fica de fora é a
+    // recuperação por título, que cruza as tabelas por essa coluna.
     codigo: "sequencia_nula",
-    rotulo: "Sequência vazia ou não numérica (é a chave que liga as tabelas)",
-    severidade: "bloqueio",
+    rotulo: "Sequência vazia (sem ela não dá para cruzar título a título entre as tabelas)",
+    severidade: "aviso",
     falha: (r) => r.sequencia === null,
   },
   {
@@ -203,17 +206,30 @@ export interface RelatorioQualidade {
 
 const MAX_EXEMPLOS = 5;
 
+/** Problemas estruturais detectados na compilação do DE/PARA. */
+export interface EstruturaMapa {
+  /** Campos obrigatórios que ficaram sem origem — planilha trocada ou mapa errado. */
+  faltando: string[];
+  /** Colunas declaradas no mapa que não existem no cabeçalho do arquivo. */
+  origensAusentes: string[];
+}
+
 /**
- * Analisa as abas já lidas da planilha e devolve os problemas agregados.
- * `linhas` são as linhas de dados (sem cabeçalho), na ordem original — o
+ * Analisa as abas já traduzidas e devolve os problemas agregados.
+ * `registros` são as linhas convertidas pelo DE/PARA, na ordem original — o
  * número reportado ao usuário soma 2 (cabeçalho + índice 0).
+ *
+ * É `Iterable` e não array de propósito: assim quem chama passa um gerador que
+ * traduz linha a linha, e a planilha inteira convertida nunca fica em memória
+ * ao mesmo tempo que as linhas cruas. Em arquivo de centenas de milhares de
+ * linhas isso é a diferença entre rodar e travar a aba do navegador.
  */
 export function analisarQualidade(
   tipo: TipoSada,
-  abas: { ano: number; linhas: unknown[][] }[],
+  abas: { ano: number; registros: Iterable<Record<string, unknown>> }[],
+  estrutura?: EstruturaMapa,
 ): RelatorioQualidade {
   const regras = REGRAS_QUALIDADE[tipo];
-  const esperado = COLUNAS_ESPERADAS[tipo];
   const acc = new Map<string, AchadoQualidade>();
 
   const registrar = (
@@ -231,24 +247,33 @@ export function analisarQualidade(
     if (a.exemplos.length < MAX_EXEMPLOS) a.exemplos.push(onde);
   };
 
+  // Estrutural: o mapa não cobre o arquivo. Bloqueia porque importar assim
+  // grava a tabela inteira com o campo nulo, sem erro de banco para avisar.
+  for (const campo of estrutura?.faltando ?? []) {
+    registrar(
+      "campo_obrigatorio_sem_origem",
+      `"${campo}" é obrigatório para "${ROTULO_TIPO[tipo]}" e não tem coluna de origem — confira o DE/PARA e o tipo selecionado`,
+      "bloqueio",
+      "arquivo inteiro",
+    );
+  }
+  for (const origem of estrutura?.origensAusentes ?? []) {
+    registrar(
+      "coluna_do_mapa_ausente",
+      `O DE/PARA aponta para a coluna "${origem}", que não existe neste arquivo`,
+      "bloqueio",
+      "arquivo inteiro",
+    );
+  }
+
   let totalLinhas = 0;
 
-  for (const { ano, linhas } of abas) {
-    // Estrutural: planilha trocada / colunas faltando na aba inteira.
-    const largura = linhas.reduce((m, l) => Math.max(m, l.length), 0);
-    if (linhas.length > 0 && largura < esperado) {
-      registrar(
-        "colunas_faltando",
-        `Planilha com ${largura} colunas, esperado ${esperado} para "${ROTULO_TIPO[tipo]}" — confira se o tipo selecionado corresponde ao arquivo`,
-        "bloqueio",
-        `${ano} · aba inteira`,
-      );
-    }
-
-    for (let i = 0; i < linhas.length; i++) {
+  for (const { ano, registros } of abas) {
+    let i = 0;
+    for (const reg of registros) {
       totalLinhas++;
-      const reg = mapearLinha(tipo, linhas[i], { cnpj_orgao: "", ano });
       const onde = `${ano} · linha ${i + 2}`;
+      i++;
       for (const regra of regras) {
         if (regra.falha(reg)) registrar(regra.codigo, regra.rotulo, regra.severidade, onde);
       }
