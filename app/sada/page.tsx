@@ -6,10 +6,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BarrasHorizontais, BarrasMensais } from "@/app/components/DashboardCharts";
+import PrevisaoOrcamentaria from "@/app/components/PrevisaoOrcamentaria";
 
 interface Dados {
   kpis: {
+    /** Principal em aberto. `total` (com encargos) só existe em parte das safras. */
     estoqueTotal: number;
+    /** Caixa recebido, com encargos. */
     arrecadadoTotal: number;
     recuperacaoGlobal: number;
     anos: { de: number; ate: number } | null;
@@ -17,7 +20,7 @@ interface Dados {
   };
   estoquePorAno: { ano: number; total: number }[];
   arrecadacaoPorAno: { ano: number; normal: number; da: number }[];
-  recuperacaoPorTributo: { sigla: string; estoque: number; arrecadado: number; pct: number }[];
+  recuperacaoPorTributo: { sigla: string; estoque: number; arrecadado: number; caixa: number; pct: number }[];
   rankingTributos: { sigla: string; estoque: number }[];
   topDevedores: { cnpj_cpf: string; divida: number; titulos: number }[];
 }
@@ -86,17 +89,17 @@ export default function SadaPage() {
         <div className="kpi">
           <span className="kpi-valor">{brl(d.kpis.estoqueTotal)}</span>
           <span className="kpi-nome">Estoque de dívida ativa</span>
-          <span className="kpi-desc">saldo em aberto</span>
+          <span className="kpi-desc">principal em aberto, sem encargos</span>
         </div>
         <div className="kpi">
           <span className="kpi-valor">{brl(d.kpis.arrecadadoTotal)}</span>
           <span className="kpi-nome">Recuperado (DA)</span>
-          <span className="kpi-desc">arrecadado da dívida ativa</span>
+          <span className="kpi-desc">caixa recebido, com encargos</span>
         </div>
         <div className="kpi">
           <span className="kpi-valor">{d.kpis.recuperacaoGlobal}%</span>
           <span className="kpi-nome">Taxa de recuperação</span>
-          <span className="kpi-desc">recuperado ÷ (recuperado + estoque)</span>
+          <span className="kpi-desc">principal recuperado ÷ principal total</span>
         </div>
         <div className="kpi">
           <span className="kpi-valor">{d.kpis.entesPendentes}</span>
@@ -126,7 +129,11 @@ export default function SadaPage() {
 
         {/* Estoque por ano */}
         <section className="card">
-          <h2>Estoque de dívida por ano (R$ mi)</h2>
+          <h2>Estoque de dívida por safra (R$ mi)</h2>
+          <p className="detalhe">
+            Ano de inscrição do crédito, em principal. Não é o saldo ao fim de cada
+            exercício.
+          </p>
           <BarrasMensais dados={d.estoquePorAno.map((e) => ({ rotulo: String(e.ano), valor: milhoes(e.total) }))} />
         </section>
 
@@ -135,6 +142,9 @@ export default function SadaPage() {
           <h2>Arrecadação de DA por ano (R$ mi)</h2>
           <BarrasMensais dados={d.arrecadacaoPorAno.map((a) => ({ rotulo: String(a.ano), valor: milhoes(a.da) }))} />
         </section>
+
+        {/* Previsão orçamentária — 10 exercícios */}
+        <PrevisaoOrcamentaria />
 
         {/* Top devedores */}
         <section className="card sada-col-2">
