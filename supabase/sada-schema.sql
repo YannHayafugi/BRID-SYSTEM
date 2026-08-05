@@ -206,83 +206,78 @@ with da as (
   select r.* from public.sada_recebimentos_da r
   join public.sada_importacoes i on i.id = r.importacao_id and i.vigente
 )
+-- Um agregado por tabela: TODAS as checagens saem de um único scan, via
+-- count(*) filter. A versão anterior repetia `(select count(*) from da)` em
+-- cada branch do union, o que fazia o Postgres reescanear as CTEs dezenas de
+-- vezes — 7,6 s contra os 8 s de statement_timeout. Assim fica ~0,6 s.
+-- Os `values` abaixo desempilham o agregado de volta em uma linha por check.
+, agg_da as (
+  select count(*) as base,
+         count(*) filter (where total is null) as c1,
+         count(*) filter (where cnpj_cpf is null or btrim(cnpj_cpf) = ''
+                             or regexp_replace(cnpj_cpf, '\D', '', 'g') ~ '^0+$') as c2,
+         count(*) filter (where valor is null or valor <= 0) as c3,
+         count(*) filter (where sigla is null or btrim(sigla) = '') as c4,
+         count(*) filter (where inscricao is null or btrim(inscricao) = '') as c5,
+         count(*) filter (where sequencia is null) as c6
+    from da
+), agg_lc as (
+  select count(*) as base,
+         count(*) filter (where valor is null or valor <= 0) as c1,
+         count(*) filter (where cnpj_cpf is null or btrim(cnpj_cpf) = ''
+                             or regexp_replace(cnpj_cpf, '\D', '', 'g') ~ '^0+$') as c2,
+         count(*) filter (where sigla is null or btrim(sigla) = '') as c3,
+         count(*) filter (where sequencia is null) as c4
+    from lc
+), agg_rc as (
+  select count(*) as base,
+         count(*) filter (where totaldam is null or totaldam <= 0) as c1,
+         count(*) filter (where sequencia is null) as c2
+    from rc
+), agg_rd as (
+  select count(*) as base,
+         count(*) filter (where totaldam is null or totaldam <= 0) as c1,
+         count(*) filter (where sequencia is null) as c2
+    from rd
+)
 select categoria, tabela, problema, qtd, base from (
   -- DÍVIDA ATIVA
-  select 'total_nulo'::text  as categoria, 'divida_ativa'::text as tabela,
-         'Dívida Ativa — total nulo (só principal)'::text as problema,
-         count(*) filter (where total is null) as qtd,
-         (select count(*) from da) as base
-    from da
-  union all
-  select 'contribuinte', 'divida_ativa', 'Dívida Ativa — CNPJ/CPF zerado ou vazio',
-         count(*) filter (where cnpj_cpf is null or btrim(cnpj_cpf) = ''
-                             or regexp_replace(cnpj_cpf, '\D', '', 'g') ~ '^0+$'),
-         (select count(*) from da)
-    from da
-  union all
-  select 'valor', 'divida_ativa', 'Dívida Ativa — valor nulo ou ≤ 0',
-         count(*) filter (where valor is null or valor <= 0),
-         (select count(*) from da)
-    from da
-  union all
-  select 'campo_chave', 'divida_ativa', 'Dívida Ativa — sigla vazia',
-         count(*) filter (where sigla is null or btrim(sigla) = ''),
-         (select count(*) from da)
-    from da
-  union all
-  select 'campo_chave', 'divida_ativa', 'Dívida Ativa — inscrição vazia',
-         count(*) filter (where inscricao is null or btrim(inscricao) = ''),
-         (select count(*) from da)
-    from da
-  union all
-  select 'campo_chave', 'divida_ativa', 'Dívida Ativa — sequência nula',
-         count(*) filter (where sequencia is null),
-         (select count(*) from da)
-    from da
+  select v.categoria, v.tabela, v.problema, v.qtd, a.base
+    from agg_da a
+    cross join lateral (values
+      ('total_nulo'::text, 'divida_ativa'::text, 'Dívida Ativa — total nulo (só principal)'::text, a.c1),
+      ('contribuinte',     'divida_ativa', 'Dívida Ativa — CNPJ/CPF zerado ou vazio', a.c2),
+      ('valor',            'divida_ativa', 'Dívida Ativa — valor nulo ou ≤ 0',        a.c3),
+      ('campo_chave',      'divida_ativa', 'Dívida Ativa — sigla vazia',              a.c4),
+      ('campo_chave',      'divida_ativa', 'Dívida Ativa — inscrição vazia',          a.c5),
+      ('campo_chave',      'divida_ativa', 'Dívida Ativa — sequência nula',           a.c6)
+    ) v(categoria, tabela, problema, qtd)
   -- LANÇAMENTOS
   union all
-  select 'valor', 'lancamentos', 'Lançamentos — valor nulo ou ≤ 0',
-         count(*) filter (where valor is null or valor <= 0),
-         (select count(*) from lc)
-    from lc
-  union all
-  select 'contribuinte', 'lancamentos', 'Lançamentos — CNPJ/CPF zerado ou vazio',
-         count(*) filter (where cnpj_cpf is null or btrim(cnpj_cpf) = ''
-                             or regexp_replace(cnpj_cpf, '\D', '', 'g') ~ '^0+$'),
-         (select count(*) from lc)
-    from lc
-  union all
-  select 'campo_chave', 'lancamentos', 'Lançamentos — sigla vazia',
-         count(*) filter (where sigla is null or btrim(sigla) = ''),
-         (select count(*) from lc)
-    from lc
-  union all
-  select 'campo_chave', 'lancamentos', 'Lançamentos — sequência nula',
-         count(*) filter (where sequencia is null),
-         (select count(*) from lc)
-    from lc
+  select v.categoria, v.tabela, v.problema, v.qtd, a.base
+    from agg_lc a
+    cross join lateral (values
+      ('valor'::text,  'lancamentos'::text, 'Lançamentos — valor nulo ou ≤ 0'::text,  a.c1),
+      ('contribuinte', 'lancamentos', 'Lançamentos — CNPJ/CPF zerado ou vazio', a.c2),
+      ('campo_chave',  'lancamentos', 'Lançamentos — sigla vazia',              a.c3),
+      ('campo_chave',  'lancamentos', 'Lançamentos — sequência nula',           a.c4)
+    ) v(categoria, tabela, problema, qtd)
   -- RECEBIMENTOS
   union all
-  select 'valor', 'recebimentos', 'Recebimentos — totaldam nulo ou ≤ 0',
-         count(*) filter (where totaldam is null or totaldam <= 0),
-         (select count(*) from rc)
-    from rc
-  union all
-  select 'campo_chave', 'recebimentos', 'Recebimentos — sequência nula',
-         count(*) filter (where sequencia is null),
-         (select count(*) from rc)
-    from rc
+  select v.categoria, v.tabela, v.problema, v.qtd, a.base
+    from agg_rc a
+    cross join lateral (values
+      ('valor'::text, 'recebimentos'::text, 'Recebimentos — totaldam nulo ou ≤ 0'::text, a.c1),
+      ('campo_chave', 'recebimentos', 'Recebimentos — sequência nula',             a.c2)
+    ) v(categoria, tabela, problema, qtd)
   -- RECEBIMENTOS DA
   union all
-  select 'valor', 'recebimentos_da', 'Recebimentos DA — totaldam nulo ou ≤ 0',
-         count(*) filter (where totaldam is null or totaldam <= 0),
-         (select count(*) from rd)
-    from rd
-  union all
-  select 'campo_chave', 'recebimentos_da', 'Recebimentos DA — sequência nula',
-         count(*) filter (where sequencia is null),
-         (select count(*) from rd)
-    from rd
+  select v.categoria, v.tabela, v.problema, v.qtd, a.base
+    from agg_rd a
+    cross join lateral (values
+      ('valor'::text, 'recebimentos_da'::text, 'Recebimentos DA — totaldam nulo ou ≤ 0'::text, a.c1),
+      ('campo_chave', 'recebimentos_da', 'Recebimentos DA — sequência nula',              a.c2)
+    ) v(categoria, tabela, problema, qtd)
 ) t
 order by qtd desc;
 
