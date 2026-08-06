@@ -1,22 +1,19 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Node
-node_modules/
-dist/
-
-# Segredos
-.env
-
-# Saídas geradas
-backend/output/
-uploads/
-
-# SO / editor
+node_modules
+.next
+out
+.vercel
+*.log
 .DS_Store
-Thumbs.db
-.vscode/
-.idea/
+.env
+.env.local
+.env*.local
+
+# Arquivos de teste usados durante o desenvolvimento (não fazem parte do sistema)
+teste.pdf
+texto-extraido.txt
+*.xlsx
+tsconfig.tsbuildinfo
+
+.env*
+.env
+.env.local

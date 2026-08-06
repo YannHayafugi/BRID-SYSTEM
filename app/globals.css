@@ -1,0 +1,650 @@
+:root {
+  --primaria: #c9a227;      /* dourado Grupo BRID (D16 — paleta da marca) */
+  --primaria-claro: #faf3dd;
+  --verde-fia: var(--primaria);        /* telas herdadas re-tematizadas */
+  --verde-claro: var(--primaria-claro);
+  --cinza: #667085;
+  --borda: #d8dee3;
+  --escuro: #14120d;        /* preto quente da marca — navbar e header (fixo, não muda com o tema) */
+
+  /* D22: variáveis de tema — modo claro (padrão) */
+  --bg: #f5f6f7;
+  --bg-card: #ffffff;
+  --bg-suave: #fafbfc;
+  --texto: #1c2126;
+  --texto-suave: #33383d;
+  --input-bg: #ffffff;
+  --track: #e2e8f0;
+}
+
+[data-theme="dark"] {
+  --primaria-claro: #2a2410;
+  --cinza: #a39c8a;
+  --borda: #3a3529;
+  --bg: #0f0e0b;
+  --bg-card: #1c1a14;
+  --bg-suave: #221f18;
+  --texto: #f0ede4;
+  --texto-suave: #c9c4b6;
+  --input-bg: #221f18;
+  --track: #3a3529;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ---------- login ---------- */
+#tela-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.card-login {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 40px 32px;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(28, 39, 51, 0.08);
+}
+
+.card-login .logo {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  object-fit: cover;
+  display: block;
+}
+
+.card-login h1 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--texto);
+}
+
+.card-login .sub {
+  margin: 6px 0 0;
+  color: var(--cinza);
+  font-size: 14px;
+}
+
+.card-login input {
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px;
+  font-size: 15px;
+  border: 1px solid #b3c2d1;
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--texto);
+}
+
+.card-login button {
+  width: 100%;
+  margin-top: 12px;
+  padding: 13px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--escuro);
+  background: var(--primaria);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.card-login button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.erro-texto {
+  color: #991b1b;
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--fonte-corpo), -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--texto);
+  transition: background .15s, color .15s;
+}
+
+/* D25: tipografia — títulos, botões e navegação usam a fonte de marca (mais
+ * pesada e geométrica), o corpo do texto usa a fonte de leitura. */
+h1, h2, h3, h4,
+.kpi-nome, .btn, .btn-azul, .btn-doc, .btn-dl, .fu-badge, .etapa-badge {
+  font-family: var(--fonte-titulo), -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 700;
+}
+
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+header.topo {
+  background: var(--escuro);
+  color: var(--primaria);
+  padding: 20px 24px;
+}
+
+header.topo h1 {
+  margin: 0;
+  font-size: 20px;
+  color: #fff;
+}
+
+header.topo p {
+  margin: 4px 0 0;
+  opacity: 0.85;
+  font-size: 13px;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 22px 24px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  font-size: 16px;
+  margin: 0 0 16px;
+  color: var(--verde-fia);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+.field small {
+  color: var(--cinza);
+  font-size: 12px;
+}
+
+input, select, textarea {
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--texto);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 120px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.etapa-card {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: var(--bg-suave);
+  position: relative;
+}
+
+.etapa-card .etapa-badge {
+  display: inline-block;
+  background: var(--verde-fia);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-bottom: 10px;
+}
+
+.etapa-remove {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #b3261e;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btn {
+  background: var(--verde-fia);
+  color: var(--escuro);
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn.secondary {
+  background: var(--bg-card);
+  color: var(--verde-fia);
+  border: 1px solid var(--verde-fia);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.msg {
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.msg.erro {
+  color: #b3261e;
+}
+
+.msg.ok {
+  color: #1f7a3d;
+}
+
+.item-analise {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: var(--bg-suave);
+}
+
+.item-analise.item-ok {
+  background: var(--bg-card);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+}
+
+.item-analise-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.item-analise-resumo {
+  font-size: 13px;
+  color: var(--texto-suave);
+  margin: 0 0 12px;
+}
+
+.decisao-tag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.decisao-tag.decisao-pendente {
+  background: #fff3cd;
+  color: #7a5a00;
+}
+
+.decisao-tag.decisao-aceita {
+  background: #e6f4ea;
+  color: #1f7a3d;
+}
+
+.decisao-tag.decisao-recusada {
+  background: #f1f1f1;
+  color: #555;
+}
+
+/* ============ Follow-up / Dashboard (portados do app Vite — D10 híbrido) ============ */
+.page-larga { max-width: 1400px; margin: 0 auto; padding: 24px 20px 60px; }
+
+.item { background:var(--bg-card); border:1px solid var(--borda); border-radius:12px; padding:18px 20px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.item-col { flex-direction:column; align-items:flex-start; }
+.detalhe { display:block; color:var(--cinza); font-size:13px; margin-top:4px; }
+.vazio { color:var(--cinza); }
+
+.btn-azul { padding:11px 22px; font-size:14px; font-weight:600; color:var(--escuro); background:var(--primaria);
+  border:none; border-radius:8px; cursor:pointer; }
+.btn-azul:disabled { background:#b3c2d1; cursor:not-allowed; }
+.btn-dl { padding:10px 18px; background:#16a34a; color:#fff; text-decoration:none; border-radius:8px;
+  font-weight:600; font-size:14px; display:inline-block; }
+.btn-sec { background:#5a6b7b; }
+.btn-doc { display:inline-block; padding:10px 18px; background:var(--primaria-claro); color:var(--primaria);
+  border:1px dashed var(--primaria); border-radius:8px; font-weight:600; font-size:14px; cursor:pointer; }
+.btn-doc.pendente { background:#fff7ed; color:#c2410c; border-color:#c2410c; }
+/* D41: destaca quando já existe uma pré-análise (rascunho) de TR pronta,
+   diferenciando de "sem análise" (dashed) e "concluída" (✓). */
+.btn-doc.destaque { background:var(--primaria); color:var(--escuro); border:1px solid var(--primaria); }
+.downloads { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
+
+/* D52: página inicial pública (landing enxuta, identidade grupobrid.com) —
+   sempre escura, independente do tema escolhido no app. */
+.landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: #111;
+  padding: 40px 20px 24px;
+  text-align: center;
+}
+.landing-conteudo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: landing-surgir .9s ease both;
+}
+.landing-marca {
+  font-family: var(--fonte-titulo), sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .35em;
+  color: #E8C65B;
+  text-transform: uppercase;
+}
+.landing-titulo {
+  font-family: var(--fonte-brid), var(--fonte-titulo), sans-serif;
+  font-weight: 700;
+  font-size: clamp(30px, 6vw, 52px);
+  line-height: 1.1;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: #fff;
+  margin: 0;
+}
+.landing-sub {
+  color: #c9c4b6;
+  font-size: 15px;
+  max-width: 480px;
+  margin: 0;
+  animation: landing-surgir .9s ease .25s both;
+}
+.landing-cta {
+  display: inline-block;
+  margin-top: 10px;
+  background: #E8C65B;
+  color: #181511;
+  font-family: var(--fonte-titulo), sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  text-decoration: none;
+  padding: 13px 30px;
+  border-radius: 8px;
+  transition: transform .2s ease, opacity .2s ease;
+  animation: landing-surgir .9s ease .45s both;
+}
+.landing-cta:hover { transform: translateY(-2px); opacity: .92; }
+.landing-atalhos { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+.landing-cta.secundario { background:transparent; color:#E8C65B; border:1px solid #E8C65B; }
+.landing-rodape {
+  color: #69727d;
+  font-size: 12px;
+  animation: landing-surgir .9s ease .65s both;
+}
+@keyframes landing-surgir {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fu-topo { position:relative; padding-right:64px; width:100%; }
+.fu-icones { position:absolute; top:0; right:0; display:flex; align-items:center; gap:2px; }
+.fu-icone-btn { background:none; border:none; cursor:pointer; padding:6px; border-radius:8px;
+  color:var(--texto-suave); display:flex; align-items:center; justify-content:center;
+  opacity:.75; transition:opacity .15s, background .15s, color .15s; }
+.fu-icone-btn:hover { opacity:1; background:var(--bg-suave); color:var(--texto); }
+.fu-icone-btn.lixeira:hover { color:#dc2626; background:#fee2e2; }
+.fu-progresso { width:100%; height:8px; background:var(--track); border-radius:4px; overflow:hidden; }
+.fu-barra { height:100%; background:var(--primaria); border-radius:4px; transition:width .3s; }
+.fu-etapa { width:100%; padding:10px 12px; font-size:14px; font-weight:600; color:var(--texto);
+  border:1px solid var(--borda); border-radius:8px; background:var(--bg-suave); cursor:pointer; }
+.fu-badge { font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px; margin-left:8px;
+  vertical-align:middle; white-space:nowrap; }
+.fu-badge.auto { background:#dcfce7; color:#166534; }
+.fu-badge.manual { background:#fef3c7; color:#92400e; }
+/* D43: processo que concluiu todas as fases (100%) */
+.fu-badge.finalizado { background:#16a34a; color:#fff; }
+
+/* D43: cards-resumo no topo do Follow-up */
+.fu-resumo { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+.fu-resumo-card { flex:1; min-width:140px; background:var(--bg-suave); border:1px solid var(--borda);
+  border-radius:10px; padding:12px 16px; display:flex; flex-direction:column; gap:2px; }
+.fu-resumo-num { font-size:24px; font-weight:700; color:var(--texto); line-height:1.1; }
+
+.form-projeto input, .form-projeto select { width:100%; padding:11px 12px; font-size:14px;
+  border:1px solid var(--borda); border-radius:8px; margin-bottom:10px; }
+
+/* D28: grades padronizadas em até 4 cards por linha (KPIs e gráficos),
+ * reduzindo colunas de forma previsível em telas menores — em vez do
+ * auto-fit anterior, que deixava a quantidade de cards por linha variar
+ * de forma inconsistente conforme a largura disponível. */
+.dash-kpis { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
+.kpi { background:var(--bg-card); border:1px solid var(--borda); border-radius:12px; padding:12px 16px;
+  display:flex; flex-direction:column; gap:2px; }
+.kpi-valor { font-size:21px; font-weight:800; color:var(--primaria); }
+.kpi-valor small { font-size:13px; color:var(--cinza); font-weight:600; }
+.kpi-nome { font-weight:700; }
+.kpi-desc { font-size:11px; color:var(--cinza); }
+.dash-colunas { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:14px; }
+.dash-graficos { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-top:14px; }
+.dash-col h3 { margin:0 0 8px; font-size:15px; border-bottom:1px solid var(--borda); padding-bottom:8px; }
+.dash-scroll { max-height:60vh; overflow-y:auto; padding-right:4px; }
+.notif { border-left:4px solid #c2410c; }
+.notif.pronto { border-left-color:#16a34a; }
+.fase-linha { display:flex; align-items:center; gap:12px; }
+
+@media (max-width:1200px) {
+  .dash-kpis, .dash-graficos { grid-template-columns:repeat(2, 1fr); }
+}
+@media (max-width:640px) {
+  .dash-kpis, .dash-graficos { grid-template-columns:1fr; }
+}
+.fase-nome { flex:1; min-width:0; font-size:13px; }
+.fase-barra { flex:1.2; height:8px; }
+.fase-qtd { font-weight:700; min-width:34px; text-align:right; font-size:13px; }
+@media (max-width:1000px) { .dash-colunas { grid-template-columns:1fr; } .dash-scroll { max-height:none; } }
+
+/* ===== SADA — dashboard de dívida ativa ===== */
+.sada-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+.sada-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+.sada-head h1 { margin: 0; font-size: 22px; color: var(--texto); }
+.sada-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.sada-grid .card h2 { margin: 0 0 12px; font-size: 15px; color: var(--texto); }
+.sada-col-2 { grid-column: 1 / -1; }
+.sada-tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sada-tabela th, .sada-tabela td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--track); }
+.sada-tabela th:nth-child(2), .sada-tabela td:nth-child(2),
+.sada-tabela th:nth-child(3), .sada-tabela td:nth-child(3) { text-align: right; }
+@media (max-width: 720px) { .sada-grid { grid-template-columns: 1fr; } }
+
+/* Aviso de qualidade dos dados no dashboard do SADA */
+.sada-aviso-qualidade {
+  display: block;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #fff4e5;
+  border: 1px solid #f0c98a;
+  color: #8a5a00;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.sada-aviso-qualidade:hover { background: #ffeccf; }
+[data-theme="dark"] .sada-aviso-qualidade {
+  background: #3a2e1a; border-color: #6b5424; color: #f0c98a;
+}
+
+/* Relatório de verificação da planilha na Atualização da Dívida */
+.qualidade-relatorio {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid;
+  font-size: 14px;
+}
+.qualidade-relatorio.aviso    { background: #fff4e5; border-color: #f0c98a; color: #6b4a00; }
+.qualidade-relatorio.bloqueio { background: #fdecec; border-color: #e9a3a3; color: #8a1f1f; }
+.qualidade-relatorio ul { margin: 10px 0 0; padding-left: 18px; }
+.qualidade-relatorio li { margin-bottom: 8px; line-height: 1.45; }
+.qualidade-relatorio small { opacity: 0.8; }
+.qualidade-relatorio .tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+.qualidade-relatorio .tag.aviso    { background: #b57d18; }
+.qualidade-relatorio .tag.bloqueio { background: #b23c3c; }
+[data-theme="dark"] .qualidade-relatorio.aviso {
+  background: #3a2e1a; border-color: #6b5424; color: #f0c98a;
+}
+[data-theme="dark"] .qualidade-relatorio.bloqueio {
+  background: #3a1f1f; border-color: #6b2c2c; color: #f0a3a3;
+}
+
+/* ---------------------------------------------------------------------
+   SADA · DE/PARA
+   Filtros em linha (CNPJ + tipo + ação) e abas Colunas/Valores.
+   As tags obrigatório/recomendado reaproveitam o visual do relatório de
+   qualidade, mas aqui vivem dentro de tabela — por isso o seletor próprio.
+   --------------------------------------------------------------------- */
+.depara-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.depara-filtros .field { margin: 0; flex: 1 1 180px; }
+
+.depara-abas {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--borda);
+}
+.depara-abas button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.82rem;
+  color: var(--texto);
+  opacity: 0.6;
+}
+.depara-abas button.ativa {
+  opacity: 1;
+  color: var(--primaria);
+  border-bottom-color: var(--primaria);
+}
+
+.sada-tabela .tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  vertical-align: middle;
+}
+.sada-tabela .tag.aviso    { background: #b57d18; }
+.sada-tabela .tag.bloqueio { background: #b23c3c; }
+.sada-tabela select,
+.sada-tabela input[type="text"],
+.sada-tabela input:not([type]) { width: 100%; min-width: 130px; }
+
+/* ---------------------------------------------------------------------
+   SADA · Previsão orçamentária
+   Barra em duas camadas: a clara é o intervalo conservador–otimista, a
+   cheia é o cenário base. Mostra a incerteza sem precisar de biblioteca.
+   --------------------------------------------------------------------- */
+.prev-grafico {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 180px;
+  margin: 12px 0 4px;
+  padding-top: 8px;
+}
+.prev-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+.prev-faixa {
+  width: 100%;
+  background: color-mix(in srgb, var(--primaria) 22%, transparent);
+  border-radius: 3px 3px 0 0;
+  display: flex;
+  align-items: flex-end;
+  min-height: 2px;
+}
+.prev-base {
+  width: 100%;
+  background: var(--primaria);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+.prev-rotulo {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-top: 4px;
+  white-space: nowrap;
+}
