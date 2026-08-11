@@ -1,17 +1,46 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Atenção: variáveis NEXT_PUBLIC_* são inlinadas pelo Next.js em tempo de
+// BUILD, inclusive no middleware. Se não estiverem definidas no ambiente do
+// build, viram `undefined` no bundle — adicioná-las depois no painel não
+// resolve sozinho, é preciso um novo deploy (rebuild).
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+/**
+ * Devolve os nomes das variáveis de ambiente exigidas que estão faltando.
+ * Vazio = configuração OK.
+ *
+ * Existe para o middleware poder responder um erro legível em vez de estourar
+ * dentro do `createServerClient` — uma exceção ali derruba a invocação inteira
+ * e a Vercel devolve MIDDLEWARE_INVOCATION_FAILED, que não diz o que faltou.
+ */
+export function configSupabaseFaltando(): string[] {
+  const faltando: string[] = [];
+  if (!SUPABASE_URL) faltando.push("NEXT_PUBLIC_SUPABASE_URL");
+  if (!SUPABASE_PUBLISHABLE_KEY) faltando.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+  return faltando;
+}
+
 /**
  * Atualiza a sessão do Supabase a cada requisição (renova o cookie antes que
  * expire) e devolve o usuário autenticado, se houver. Usado pelo middleware
  * (middleware.ts na raiz do projeto) para proteger rotas.
+ *
+ * Pressupõe configuração válida: chame `configSupabaseFaltando()` antes.
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
+  const faltando = configSupabaseFaltando();
+  if (faltando.length) {
+    throw new Error(`Supabase não configurado. Variáveis ausentes: ${faltando.join(", ")}.`);
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    SUPABASE_URL!,
+    SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
         getAll() {

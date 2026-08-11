@@ -9,9 +9,21 @@ import { createServerClient } from "@supabase/ssr";
  */
 export function getSupabaseRouteClient() {
   const cookieStore = cookies();
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!url || !publishableKey) {
+    throw new Error(
+      "Variáveis de ambiente do Supabase ausentes (NEXT_PUBLIC_SUPABASE_URL / " +
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY). São inlinadas em tempo de build: " +
+        "defina-as no ambiente e refaça o deploy."
+    );
+  }
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    url,
+    publishableKey,
     {
       cookies: {
         getAll() {

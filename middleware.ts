@@ -1,10 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
+import { updateSession, configSupabaseFaltando } from "@/lib/supabase/middleware";
 
 // D52: "/" é a página inicial pública (landing) — vem antes do login.
 const ROTAS_PUBLICAS = ["/", "/login"];
 
 export async function middleware(request: NextRequest) {
+  // Sem as variáveis do Supabase não há sessão a validar e nenhuma rota
+  // funciona. Respondemos 503 com a causa em texto em vez de deixar o
+  // createServerClient estourar: uma exceção aqui vira MIDDLEWARE_INVOCATION_FAILED
+  // (500 opaco em TODAS as rotas, sem dizer qual variável faltou).
+  const faltando = configSupabaseFaltando();
+  if (faltando.length) {
+    console.error(
+      `[middleware] Supabase não configurado. Variáveis ausentes no build: ${faltando.join(", ")}. ` +
+        "Defina-as no projeto (Vercel: Settings > Environment Variables) e faça um NOVO DEPLOY — " +
+        "variáveis NEXT_PUBLIC_* são inlinadas em tempo de build."
+    );
+    return new NextResponse(
+      `Configuração incompleta: ${faltando.join(", ")} não definida(s) no build.\n`,
+      { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } }
+    );
+  }
+
   const { supabaseResponse, autenticado, contaInativa } = await updateSession(request);
 
   const path = request.nextUrl.pathname;
