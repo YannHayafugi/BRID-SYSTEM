@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { somenteDigitos } from "@/lib/mascaras";
 import { CampoValor, chaveValor } from "@/lib/sada/depara";
 
 export const runtime = "nodejs";
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
   if (barrado) return barrado;
 
   const { searchParams } = new URL(req.url);
-  const cnpj = (searchParams.get("cnpj") ?? "").trim();
+  const cnpj = somenteDigitos(searchParams.get("cnpj") ?? "");
   const campo = searchParams.get("campo");
   if (!cnpj) return NextResponse.json({ erro: "Informe o cnpj." }, { status: 400 });
   if (campo && !CAMPOS.includes(campo as CampoValor)) {
@@ -76,7 +77,7 @@ export async function PUT(req: NextRequest) {
     pares?: { valor_origem?: string; valor_canonico?: string }[];
   } | null;
 
-  const cnpj = (body?.cnpj ?? "").trim();
+  const cnpj = somenteDigitos(body?.cnpj ?? "");
   const campo = body?.campo ?? "";
   if (!cnpj) return NextResponse.json({ erro: "Informe o cnpj." }, { status: 400 });
   if (!CAMPOS.includes(campo as CampoValor)) {

@@ -15,6 +15,7 @@ import {
 import {
   AbaEscolhida, AbasModo, compilarMapa, compilarValores, Mapa,
 } from "@/lib/sada/depara";
+import { somenteDigitos } from "@/lib/mascaras";
 
 const LOTE = 1000;
 
@@ -26,6 +27,8 @@ interface ConfigDePara {
   abasModo: AbasModo;
   abas: AbaEscolhida[] | null;
   padrao: boolean;
+  /** Nomes de todos os mapas do ente+tipo — alimenta o seletor. */
+  nomes: string[];
   pares: { campo: string; valor_origem: string; valor_canonico: string }[];
 }
 
@@ -39,10 +42,16 @@ export default function AtualizacaoDivida() {
   const [erro, setErro] = useState("");
   const [concluido, setConcluido] = useState<string | null>(null);
   const [relatorio, setRelatorio] = useState<RelatorioQualidade | null>(null);
+  // Qual DE/PARA usar. Vazio = deixa o servidor escolher o mais recente, que é
+  // o comportamento de quando só podia existir um mapa por ente+tipo.
+  const [mapaNome, setMapaNome] = useState("");
+  const [mapasDisponiveis, setMapasDisponiveis] = useState<string[]>([]);
   // Planilha já lida — evita reprocessar o arquivo ao confirmar os avisos.
   // O CNPJ entra na chave porque o DE/PARA (e com ele o recorte de abas) é
   // por ente: trocar de ente precisa reler o arquivo.
-  const cache = useRef<{ arquivo: File; tipo: TipoSada; cnpj: string; abas: Aba[] } | null>(null);
+  const cache = useRef<
+    { arquivo: File; tipo: TipoSada; cnpj: string; mapa: string; abas: Aba[] } | null
+  >(null);
 
   /** Troca de arquivo/tipo invalida a verificação anterior. */
   function resetarVerificacao() {
@@ -51,8 +60,9 @@ export default function AtualizacaoDivida() {
 
   /** Busca o DE/PARA do ente. Sem cadastro a API devolve o layout posicional
    *  padrão (`padrao: true`), então esta tela funciona igual para ente antigo. */
-  async function carregarDePara(cnpjLimpo: string, t: TipoSada): Promise<ConfigDePara> {
-    const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(cnpjLimpo)}&tipo=${t}`);
+  async function carregarDePara(cnpjLimpo: string, t: TipoSada, nome: string): Promise<ConfigDePara> {
+    const q = nome ? `&nome=${encodeURIComponent(nome)}` : "";
+    const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(cnpjLimpo)}&tipo=${t}${q}`);
     const j = await r.json();
     if (!r.ok) throw new Error(j.erro || "Falha ao carregar o DE/PARA do ente.");
 
@@ -64,8 +74,25 @@ export default function AtualizacaoDivida() {
       abasModo: j.depara.abas_modo ?? "ano_no_nome",
       abas: j.depara.abas ?? null,
       padrao: !!j.padrao,
+      nomes: j.nomes ?? [],
       pares: rv.ok ? (jv.pares ?? []) : [],
     };
+  }
+
+  /** Lista os mapas do ente+tipo para o seletor. Silencioso de propósito:
+   *  falhar aqui não impede importar, só esconde a escolha. */
+  async function carregarMapas(t: TipoSada) {
+    const c = somenteDigitos(cnpj);
+    if (!c) { setMapasDisponiveis([]); return; }
+    try {
+      const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(c)}&tipo=${t}`);
+      const j = await r.json();
+      const nomes: string[] = r.ok ? (j.nomes ?? []) : [];
+      setMapasDisponiveis(nomes);
+      setMapaNome((atual) => (nomes.includes(atual) ? atual : ""));
+    } catch {
+      setMapasDisponiveis([]);
+    }
   }
 
   /**
@@ -74,7 +101,9 @@ export default function AtualizacaoDivida() {
    */
   async function lerPlanilha(f: File, t: TipoSada, cfg: ConfigDePara, cnpjLimpo: string): Promise<Aba[]> {
     const c = cache.current;
-    if (c && c.arquivo === f && c.tipo === t && c.cnpj === cnpjLimpo) return c.abas;
+    if (c && c.arquivo === f && c.tipo === t && c.cnpj === cnpjLimpo && c.mapa === mapaNome) {
+      return c.abas;
+    }
 
     const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
 
@@ -100,7 +129,7 @@ export default function AtualizacaoDivida() {
       return { ano, cabecalho, linhas: m.slice(1).filter((r) => !linhaVazia(r)) };
     });
 
-    cache.current = { arquivo: f, tipo: t, cnpj: cnpjLimpo, abas };
+    cache.current = { arquivo: f, tipo: t, cnpj: cnpjLimpo, mapa: mapaNome, abas };
     return abas;
   }
 
@@ -127,10 +156,11 @@ export default function AtualizacaoDivida() {
     let anoMin = Infinity, anoMax = -Infinity;
 
     try {
-      const cnpjLimpo = cnpj.trim();
+      // Só dígitos: a mesma chave usada pelo DE/PARA e gravada nas tabelas.
+      const cnpjLimpo = somenteDigitos(cnpj);
 
       setStatus("Carregando o DE/PARA do ente…");
-      const cfg = await carregarDePara(cnpjLimpo, tipo);
+      const cfg = await carregarDePara(cnpjLimpo, tipo, mapaNome);
 
       const abas = await lerPlanilha(arquivo, tipo, cfg, cnpjLimpo);
       const totalLinhas = abas.reduce((s, a) => s + a.linhas.length, 0);
@@ -186,7 +216,10 @@ export default function AtualizacaoDivida() {
 
       setStatus("Iniciando importação…");
       const ini = await post("/api/sada/importar", {
-        cnpj: cnpj.trim(), tipo, arquivoNome: arquivo.name,
+        cnpj: cnpjLimpo, tipo, arquivoNome: arquivo.name,
+        // Sem isto o servidor aposenta todos os lotes do ente+tipo, e uma
+        // importação de um ano só faz os demais sumirem dos dashboards.
+        anos: abas.map((a) => a.ano),
       });
       importacaoId = ini.importacaoId;
 
@@ -249,7 +282,10 @@ export default function AtualizacaoDivida() {
         <div className="field">
           <label>Tipo de planilha</label>
           <select value={tipo} disabled={rodando}
-            onChange={(e) => { setTipo(e.target.value as TipoSada); resetarVerificacao(); }}>
+            onChange={(e) => {
+              const t = e.target.value as TipoSada;
+              setTipo(t); resetarVerificacao(); void carregarMapas(t);
+            }}>
             {TIPOS_SADA.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t]}</option>)}
           </select>
         </div>
@@ -257,8 +293,21 @@ export default function AtualizacaoDivida() {
         <div className="field">
           <label>CNPJ do ente</label>
           <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="Somente números"
-            disabled={rodando} />
+            onBlur={() => void carregarMapas(tipo)} disabled={rodando} />
+          <small>A pontuação é ignorada — o ente é identificado só pelos dígitos.</small>
         </div>
+
+        {mapasDisponiveis.length > 1 && (
+          <div className="field">
+            <label>DE/PARA a usar</label>
+            <select value={mapaNome} disabled={rodando}
+              onChange={(e) => { setMapaNome(e.target.value); resetarVerificacao(); }}>
+              <option value="">Mais recente</option>
+              {mapasDisponiveis.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <small>Este ente tem mais de um mapa cadastrado para este tipo de planilha.</small>
+          </div>
+        )}
 
         <div className="field">
           <label>Planilha (.xlsx)</label>

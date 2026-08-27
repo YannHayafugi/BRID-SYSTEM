@@ -3,8 +3,14 @@ import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { TIPOS_SADA, TipoSada } from "@/lib/sada/import";
 import { AbaEscolhida, Mapa, MAPA_PADRAO, validarMapa } from "@/lib/sada/depara";
+import { somenteDigitos } from "@/lib/mascaras";
 
 export const runtime = "nodejs";
+
+/** Nome do mapa quando o ente tem só um. Mantém compatível o cadastro antigo,
+ *  criado quando `sada_depara` era única por (cnpj_orgao, tipo).
+ *  Não exportado: route.ts do Next.js só aceita exportar os handlers e a config. */
+const NOME_PADRAO = "Padrão";
 
 /**
  * DE/PARA de colunas por ente + tipo de planilha.
@@ -32,27 +38,43 @@ export async function GET(req: NextRequest) {
   if (barrado) return barrado;
 
   const { searchParams } = new URL(req.url);
-  const cnpj = (searchParams.get("cnpj") ?? "").trim();
+  // Chave canônica: só dígitos. Antes era `.trim()`, e o mesmo ente digitado
+  // "12.345.678/0001-90" numa tela e "12345678000190" na outra virava dois
+  // cadastros: o importador não achava o mapa, caía no MAPA_PADRAO e traduzia
+  // a planilha por posição sem nenhum erro visível.
+  const cnpj = somenteDigitos(searchParams.get("cnpj") ?? "");
   const tipo = searchParams.get("tipo") ?? "";
+  const nome = (searchParams.get("nome") ?? "").trim();
   if (!cnpj || !TIPOS_SADA.includes(tipo as TipoSada)) {
     return NextResponse.json({ erro: "Informe cnpj e um tipo válido." }, { status: 400 });
   }
 
   const sb = getSupabaseAdmin();
-  const { data, error } = await sb
+  // Pode haver mais de um mapa por ente+tipo (ex.: o ente trocou de sistema no
+  // meio do ano). `nomes` alimenta o seletor da tela de importação.
+  const { data: lista, error } = await sb
     .from("sada_depara")
-    .select("cnpj_orgao, tipo, abas_modo, abas, mapa, observacao, updated_at")
+    .select("cnpj_orgao, tipo, nome, abas_modo, abas, mapa, observacao, updated_at")
     .eq("cnpj_orgao", cnpj)
     .eq("tipo", tipo)
-    .maybeSingle();
+    .order("updated_at", { ascending: false });
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+
+  const nomes = (lista ?? []).map((d) => String(d.nome));
+  // Sem `nome` na query devolve o mais recente — o comportamento de quando só
+  // podia existir um mapa por ente+tipo.
+  const data = nome
+    ? (lista ?? []).find((d) => String(d.nome) === nome) ?? null
+    : (lista ?? [])[0] ?? null;
 
   if (!data) {
     return NextResponse.json({
       padrao: true,
+      nomes,
       depara: {
         cnpj_orgao: cnpj,
         tipo,
+        nome: NOME_PADRAO,
         abas_modo: "ano_no_nome",
         abas: null,
         mapa: MAPA_PADRAO[tipo as TipoSada],
@@ -60,7 +82,7 @@ export async function GET(req: NextRequest) {
       },
     });
   }
-  return NextResponse.json({ padrao: false, depara: data });
+  return NextResponse.json({ padrao: false, nomes, depara: data });
 }
 
 /** PUT /api/sada/depara — cria ou substitui o mapa do ente+tipo. */
@@ -78,14 +100,16 @@ export async function PUT(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as {
     cnpj?: string;
     tipo?: string;
+    nome?: string;
     mapa?: Mapa;
     abasModo?: string;
     abas?: AbaEscolhida[] | null;
     observacao?: string | null;
   } | null;
 
-  const cnpj = (body?.cnpj ?? "").trim();
+  const cnpj = somenteDigitos(body?.cnpj ?? "");
   const tipo = body?.tipo ?? "";
+  const nome = (body?.nome ?? "").trim() || NOME_PADRAO;
   const mapa = body?.mapa;
   const abasModo = body?.abasModo ?? "ano_no_nome";
 
@@ -130,6 +154,7 @@ export async function PUT(req: NextRequest) {
     {
       cnpj_orgao: cnpj,
       tipo,
+      nome,
       abas_modo: abasModo,
       abas,
       mapa,
@@ -137,7 +162,7 @@ export async function PUT(req: NextRequest) {
       criado_por: profile!.id,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "cnpj_orgao,tipo" },
+    { onConflict: "cnpj_orgao,tipo,nome" },
   );
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
