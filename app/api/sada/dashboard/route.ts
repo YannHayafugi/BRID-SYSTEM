@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { cnpjsDoFiltro } from "@/lib/sada/clientes";
 
 export const runtime = "nodejs";
 
@@ -8,9 +9,11 @@ export const runtime = "nodejs";
  * Dados agregados do dashboard do SADA (Sistema de Análise de Dívida Ativa).
  * As tabelas sada_* têm RLS sem políticas, então a leitura usa o cliente admin
  * (service role) e a permissão é validada aqui, por sessão — padrão do app.
- * Agrega todos os entes vigentes (o filtro por CNPJ entra numa próxima fase).
+ * Sem `?cliente=`, agrega todos os entes vigentes. Com cliente, soma só os
+ * CNPJs vinculados a ele em sada_ente_cnpj — a prefeitura costuma operar sob
+ * vários (prefeitura, autarquias, fundos), e cada um é um cnpj_orgao distinto.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const profile = await getProfileAtual();
   if (!profile) {
     return NextResponse.json({ erro: "Sessão expirada. Faça login novamente." }, { status: 401 });
@@ -20,20 +23,43 @@ export async function GET() {
     return NextResponse.json({ erro: "Você não tem acesso ao módulo SADA." }, { status: 403 });
   }
 
+  let cnpjs: string[] | null;
+  try {
+    cnpjs = await cnpjsDoFiltro(new URL(req.url).searchParams.get("cliente"));
+  } catch (e) {
+    return NextResponse.json({ erro: (e as Error).message }, { status: 500 });
+  }
+
   const sb = getSupabaseAdmin();
   const num = (v: unknown) => Number(v ?? 0);
+
+  // Recorte por cliente, aplicado consulta a consulta. Um helper genérico
+  // seria mais curto, mas estoura a inferência de tipos do supabase-js
+  // (TS2589, "type instantiation is excessively deep").
+  //
+  // Cliente sem CNPJ vinculado dá lista vazia, e o `.in` então não casa nada —
+  // que é o certo: melhor dashboard zerado do que a base inteira exibida como
+  // se fosse daquele cliente.
+  const entes = cnpjs;
+  const qRecuperacao = sb.from("sada_vw_recuperacao_da")
+    .select("sigla, estoque_atual, arrecadado_da, pct_recuperacao, arrecadado_caixa");
+  const qEstoque = sb.from("sada_vw_estoque_ano").select("ano, principal");
+  const qArrec = sb.from("sada_vw_arrecadacao_ano").select("origem, ano_arrec, valor");
+  const qRanking = sb.from("sada_vw_ranking_tributos").select("sigla, estoque_total, arrecadado_da");
+  const qDevedores = sb.from("sada_vw_top_devedores").select("cnpj_cpf, divida_total, qtd_titulos");
 
   const [recuperacao, estoqueAno, arrecAno, ranking, devedores, pendentes] = await Promise.all([
     // Base PRINCIPAL nos dois lados. O campo `total` (com encargos) só existe
     // em parte das safras — somá-lo descartava silenciosamente o resto.
     // `arrecadado_caixa` é o valor efetivamente recebido, com encargos.
-    sb.from("sada_vw_recuperacao_da")
-      .select("sigla, estoque_atual, arrecadado_da, pct_recuperacao, arrecadado_caixa"),
-    sb.from("sada_vw_estoque_ano").select("ano, principal"),
-    sb.from("sada_vw_arrecadacao_ano").select("origem, ano_arrec, valor"),
-    sb.from("sada_vw_ranking_tributos").select("sigla, estoque_total, arrecadado_da"),
-    sb.from("sada_vw_top_devedores").select("cnpj_cpf, divida_total, qtd_titulos")
+    entes ? qRecuperacao.in("cnpj_orgao", entes) : qRecuperacao,
+    entes ? qEstoque.in("cnpj_orgao", entes) : qEstoque,
+    entes ? qArrec.in("cnpj_orgao", entes) : qArrec,
+    entes ? qRanking.in("cnpj_orgao", entes) : qRanking,
+    (entes ? qDevedores.in("cnpj_orgao", entes) : qDevedores)
       .order("divida_total", { ascending: false }).limit(10),
+    // Fila de vínculo: nunca filtrada por cliente — são justamente os CNPJs
+    // que ainda não pertencem a nenhum.
     sb.from("sada_entes_pendentes").select("cnpj_orgao"),
   ]);
 
