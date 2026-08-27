@@ -25,6 +25,13 @@ interface Dados {
   topDevedores: { cnpj_cpf: string; divida: number; titulos: number }[];
 }
 
+interface Cliente {
+  id: string;
+  razaoSocial: string;
+  uf: string;
+  cnpjs: { id: number; cnpj: string; apelido: string | null }[];
+}
+
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const milhoes = (v: number) => Math.round(v / 1e5) / 10; // valor em R$ milhões, 1 casa
@@ -40,9 +47,22 @@ export default function SadaPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [qualidade, setQualidade] = useState<{ comProblema: number; totalOcorrencias: number } | null>(null);
+  // Cliente selecionado. Vazio = todos os entes, que era o único comportamento
+  // possível antes de existir o vínculo cliente -> CNPJs.
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [cliente, setCliente] = useState("");
 
   useEffect(() => {
-    fetch("/api/sada/dashboard")
+    fetch("/api/sada/clientes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setClientes(j.clientes ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const q = cliente ? `?cliente=${encodeURIComponent(cliente)}` : "";
+    setCarregando(true);
+    fetch(`/api/sada/dashboard${q}`)
       .then(async (r) => {
         if (r.status === 401) { window.location.href = "/login"; return; }
         const j = await r.json();
@@ -54,11 +74,11 @@ export default function SadaPage() {
       .finally(() => setCarregando(false));
 
     // Aviso de qualidade dos dados (não bloqueia o dashboard).
-    fetch("/api/sada/qualidade")
+    fetch(`/api/sada/qualidade${q ? q + "&" : "?"}modo=resumo`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => j && setQualidade(j.resumo))
       .catch(() => {});
-  }, []);
+  }, [cliente]);
 
   if (carregando) return <main className="sada-wrap"><p className="vazio">Carregando análises…</p></main>;
   if (erro) return <main className="sada-wrap"><p className="erro-texto">{erro}</p></main>;
@@ -76,6 +96,23 @@ export default function SadaPage() {
         </div>
         <Link href="/" className="landing-cta secundario">← Hub</Link>
       </header>
+
+      <section className="card" style={{ marginBottom: 16 }}>
+        <div className="field">
+          <label>Cliente</label>
+          <select value={cliente} onChange={(e) => setCliente(e.target.value)}>
+            <option value="">Todos os entes</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.razaoSocial}{c.uf ? " — " + c.uf : ""} ({c.cnpjs.length} CNPJ)
+              </option>
+            ))}
+          </select>
+          <small>
+            A prefeitura soma os CNPJs vinculados a ela — prefeitura, autarquias, fundos.
+          </small>
+        </div>
+      </section>
 
       {qualidade && qualidade.comProblema > 0 && (
         <Link href="/sada/qualidade" className="sada-aviso-qualidade">
