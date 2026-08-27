@@ -709,9 +709,17 @@ $$;
 -- Mapa de COLUNAS: um por ente + tipo de planilha.
 create table if not exists public.sada_depara (
   id            bigint generated always as identity primary key,
+  -- SOMENTE DÍGITOS. A API normaliza na gravação e na busca: com pontuação
+  -- livre, o mesmo ente digitado "12.345.678/0001-90" numa tela e
+  -- "12345678000190" na outra virava dois cadastros, o importador não achava
+  -- o mapa e caía no MAPA_PADRAO traduzindo a planilha por posição.
   cnpj_orgao    text not null,
   tipo          text not null check (tipo in
                   ('divida_ativa', 'lancamentos', 'recebimentos', 'recebimentos_da')),
+  -- Um ente pode ter mais de um mapa por tipo (trocou de sistema no meio do
+  -- ano, layout novo em teste). A tela de importação escolhe qual usar; sem
+  -- escolha explícita vale o de updated_at mais recente.
+  nome          text not null default 'Padrão',
   -- Como as abas viram o campo `ano`:
   --   ano_no_nome      = nome da aba é o ano (formato histórico)
   --   abas_escolhidas  = usuário marca quais abas entram e o ano de cada uma
@@ -727,7 +735,7 @@ create table if not exists public.sada_depara (
   criado_por    uuid references public.gp_profiles (id),
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
-  unique (cnpj_orgao, tipo)
+  unique (cnpj_orgao, tipo, nome)
 );
 
 -- DE/PARA de VALORES: normaliza o vocabulário do ente para o canônico.
@@ -736,7 +744,7 @@ create table if not exists public.sada_depara (
 -- `valor_origem` é gravado já normalizado (upper + trim) — ver lib/sada/depara.ts.
 create table if not exists public.sada_depara_valor (
   id             bigint generated always as identity primary key,
-  cnpj_orgao     text not null,
+  cnpj_orgao     text not null,          -- somente dígitos (ver sada_depara)
   campo          text not null default 'sigla' check (campo in ('sigla', 'fase')),
   valor_origem   text not null,
   valor_canonico text not null,

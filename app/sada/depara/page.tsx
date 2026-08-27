@@ -9,6 +9,7 @@
  * sugerir o mapa e mostrar o preview. A importação continua em /sada/atualizacao.
  */
 import { useMemo, useRef, useState } from "react";
+import { somenteDigitos } from "@/lib/mascaras";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { linhaVazia, ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
@@ -50,6 +51,10 @@ export default function DeParaPage() {
   const [abasEscolhidas, setAbasEscolhidas] = useState<AbaEscolhida[]>([]);
   const [observacao, setObservacao] = useState("");
   const [ehPadrao, setEhPadrao] = useState(true);
+  // Um ente pode ter mais de um mapa por tipo (ex.: trocou de sistema no meio
+  // do ano). O nome identifica qual está sendo editado; vazio = o mais recente.
+  const [nome, setNome] = useState("");
+  const [nomesDisponiveis, setNomesDisponiveis] = useState<string[]>([]);
 
   const [campoValor, setCampoValor] = useState<CampoValor>("sigla");
   const [pares, setPares] = useState<Par[]>([]);
@@ -68,10 +73,12 @@ export default function DeParaPage() {
   // -------------------------------------------------------------------
   async function carregar() {
     setErro(""); setOk(""); setAviso("");
-    if (!cnpj.trim()) { setErro("Informe o CNPJ do ente."); return; }
+    const cnpjChave = somenteDigitos(cnpj);
+    if (!cnpjChave) { setErro("Informe o CNPJ do ente."); return; }
     setCarregando(true);
     try {
-      const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(cnpj.trim())}&tipo=${tipo}`);
+      const q = nome.trim() ? `&nome=${encodeURIComponent(nome.trim())}` : "";
+      const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(cnpjChave)}&tipo=${tipo}${q}`);
       const j = await r.json();
       if (r.status === 401) { window.location.href = "/login"; return; }
       if (!r.ok) throw new Error(j.erro || "Falha ao carregar.");
@@ -81,8 +88,10 @@ export default function DeParaPage() {
       setAbasEscolhidas(j.depara.abas ?? []);
       setObservacao(j.depara.observacao ?? "");
       setEhPadrao(!!j.padrao);
+      setNomesDisponiveis(j.nomes ?? []);
+      setNome(j.depara.nome ?? "");
 
-      const rv = await fetch(`/api/sada/depara/valores?cnpj=${encodeURIComponent(cnpj.trim())}&campo=${campoValor}`);
+      const rv = await fetch(`/api/sada/depara/valores?cnpj=${encodeURIComponent(cnpjChave)}&campo=${campoValor}`);
       const jv = await rv.json();
       if (rv.ok) setPares(jv.pares ?? []);
 
@@ -240,7 +249,7 @@ export default function DeParaPage() {
   // -------------------------------------------------------------------
   async function salvarColunas() {
     setErro(""); setOk("");
-    if (!cnpj.trim()) { setErro("Informe o CNPJ do ente."); return; }
+    if (!somenteDigitos(cnpj)) { setErro("Informe o CNPJ do ente."); return; }
     if (!validacao.ok) { setErro(validacao.erros.join(" ")); return; }
 
     setSalvando(true);
@@ -249,7 +258,7 @@ export default function DeParaPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cnpj: cnpj.trim(), tipo, mapa, abasModo,
+          cnpj: somenteDigitos(cnpj), tipo, nome: nome.trim(), mapa, abasModo,
           abas: abasModo === "abas_escolhidas" ? abasEscolhidas : null,
           observacao: observacao.trim() || null,
         }),
@@ -274,7 +283,7 @@ export default function DeParaPage() {
       const r = await fetch("/api/sada/depara/valores", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cnpj: cnpj.trim(), campo: campoValor, pares }),
+        body: JSON.stringify({ cnpj: somenteDigitos(cnpj), campo: campoValor, pares }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro || "Falha ao salvar.");
@@ -306,6 +315,15 @@ export default function DeParaPage() {
             <label>CNPJ do ente</label>
             <input value={cnpj} onChange={(e) => { setCnpj(e.target.value); setOk(""); }}
               placeholder="Somente números" disabled={carregando || salvando} />
+          </div>
+          <div className="field">
+            <label>Nome do mapa</label>
+            <input value={nome} list="depara-nomes" disabled={carregando || salvando}
+              onChange={(e) => { setNome(e.target.value); setOk(""); }}
+              placeholder="Padrão" />
+            <datalist id="depara-nomes">
+              {nomesDisponiveis.map((n) => <option key={n} value={n} />)}
+            </datalist>
           </div>
           <div className="field">
             <label>Tipo de planilha</label>

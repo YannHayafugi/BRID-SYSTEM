@@ -206,6 +206,28 @@ export interface RelatorioQualidade {
 
 const MAX_EXEMPLOS = 5;
 
+/**
+ * Hash de 53 bits de uma string (dois FNV-1a de 32 bits combinados).
+ *
+ * Serve só para detectar repetição. Guardar a linha inteira num Set custaria
+ * centenas de MB numa planilha de algumas centenas de milhares de linhas —
+ * e este módulo roda no navegador, o mesmo motivo que fez `analisarQualidade`
+ * receber `Iterable` em vez de array. Um número cabe em Set sem esse peso.
+ *
+ * Colisão marcaria uma linha boa como duplicada, mas a chance com 500 mil
+ * linhas em 2^53 é da ordem de 1 em 100 mil — e o achado é aviso, não bloqueio.
+ */
+function hash53(s: string): number {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x85ebca6b);
+  }
+  return (h1 >>> 0) * 2097152 + (h2 >>> 11);
+}
+
 /** Problemas estruturais detectados na compilação do DE/PARA. */
 export interface EstruturaMapa {
   /** Campos obrigatórios que ficaram sem origem — planilha trocada ou mapa errado. */
@@ -223,6 +245,11 @@ export interface EstruturaMapa {
  * traduz linha a linha, e a planilha inteira convertida nunca fica em memória
  * ao mesmo tempo que as linhas cruas. Em arquivo de centenas de milhares de
  * linhas isso é a diferença entre rodar e travar a aba do navegador.
+ *
+ * Também detecta repetição dentro do próprio arquivo — ver `linha_duplicada` e
+ * `sequencia_duplicada`. Repetição entre importações já era tratada pelo
+ * `vigente` do lote; dentro de um mesmo arquivo não havia nada, e uma linha
+ * repetida soma em dobro no estoque sem nenhum erro de banco.
  */
 export function analisarQualidade(
   tipo: TipoSada,
@@ -268,6 +295,10 @@ export function analisarQualidade(
 
   let totalLinhas = 0;
 
+  // Duplicidade dentro do arquivo. Guardamos hashes, não as linhas (ver hash53).
+  const linhasVistas = new Set<number>();
+  const chavesVistas = new Set<number>();
+
   for (const { ano, registros } of abas) {
     let i = 0;
     for (const reg of registros) {
@@ -276,6 +307,37 @@ export function analisarQualidade(
       i++;
       for (const regra of regras) {
         if (regra.falha(reg)) registrar(regra.codigo, regra.rotulo, regra.severidade, onde);
+      }
+
+      // Linha inteira repetida: sempre suspeito, em qualquer tipo de planilha.
+      // `reg` já traz ano e cnpj_orgao, então a comparação é naturalmente por ano.
+      const hLinha = hash53(JSON.stringify(reg));
+      if (linhasVistas.has(hLinha)) {
+        registrar(
+          "linha_duplicada",
+          "Linha idêntica a outra do mesmo ano — importar assim conta o valor duas vezes",
+          "aviso",
+          onde,
+        );
+      } else {
+        linhasVistas.add(hLinha);
+      }
+
+      // Sequência repetida só é problema no estoque: em lançamentos e
+      // recebimentos o normal é o mesmo título aparecer várias vezes (uma linha
+      // por parcela ou por pagamento).
+      if (tipo === "divida_ativa" && reg.sequencia !== null && reg.sequencia !== undefined) {
+        const hChave = hash53(`${ano}:${String(reg.sequencia)}`);
+        if (chavesVistas.has(hChave)) {
+          registrar(
+            "sequencia_duplicada",
+            "Sequência repetida no mesmo ano — na dívida ativa cada título deveria aparecer uma vez só",
+            "aviso",
+            onde,
+          );
+        } else {
+          chavesVistas.add(hChave);
+        }
       }
     }
   }
