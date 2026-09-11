@@ -13,6 +13,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { somenteDigitos, mascaraCnpj } from "@/lib/mascaras";
+import StatusDaBase from "./StatusDaBase";
 
 interface Receita {
   razao_social: string | null; nome_fantasia: string | null;
@@ -50,6 +51,9 @@ function corSituacao(s: string | null): string {
 }
 
 export default function ConsultaCnpjPage() {
+  // Duas atividades diferentes no mesmo assunto: olhar UM documento a fundo,
+  // ou enriquecer em massa os que já estão na base.
+  const [aba, setAba] = useState<"individual" | "base">("individual");
   const [doc, setDoc] = useState("");
   const [receita, setReceita] = useState<Receita | null>(null);
   const [semConsulta, setSemConsulta] = useState<string | null>(null);
@@ -112,6 +116,18 @@ export default function ConsultaCnpjPage() {
         </div>
         <Link href="/sada" className="landing-cta secundario">← Dashboard</Link>
       </header>
+
+      <div className="depara-abas">
+        <button className={aba === "individual" ? "ativa" : ""}
+                onClick={() => setAba("individual")}>Consulta individual</button>
+        <button className={aba === "base" ? "ativa" : ""}
+                onClick={() => setAba("base")}>Status da base</button>
+      </div>
+
+      {aba === "base" && <StatusDaBase />}
+
+      {aba === "individual" && (
+       <>
 
       <section className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
         <div className="field">
@@ -281,6 +297,8 @@ export default function ConsultaCnpjPage() {
             )}
           </section>
         </>
+      )}
+       </>
       )}
     </main>
   );
