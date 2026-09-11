@@ -21,6 +21,25 @@ export async function cnpjsDoCliente(orgaoId: string): Promise<string[]> {
   return (data ?? []).map((r) => somenteDigitos(String(r.cnpj_orgao)));
 }
 
+/** gp_orgaos.id é uuid: sem esta checagem, `?cliente=abc` chega ao Postgres e
+ *  volta como "invalid input syntax for type uuid", que o route transforma em
+ *  500 com a mensagem crua do banco. Um id truncado num link antigo bastava. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function clienteIdValido(v: string | null): boolean {
+  return !!v && UUID.test(v.trim());
+}
+
+/**
+ * Valor que nunca casa com um cnpj_orgao, que é sempre só dígitos.
+ *
+ * Serve para o caso "cliente existe mas não tem CNPJ vinculado": em vez de
+ * mandar lista vazia e depender de como o PostgREST interpreta `in.()`,
+ * mandamos um valor impossível e garantimos resultado vazio — que é o certo,
+ * melhor do que exibir a base inteira como se fosse daquele cliente.
+ */
+export const SEM_VINCULO = "sem-vinculo";
+
 /**
  * Traduz o parâmetro `?cliente=` (id em gp_orgaos) na lista de CNPJs a filtrar.
  *
