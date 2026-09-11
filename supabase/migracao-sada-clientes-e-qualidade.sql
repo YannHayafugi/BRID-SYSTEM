@@ -330,17 +330,20 @@ union all
 select p.cnpj_orgao,
        'pago_maior_que_titulo', 'recebimentos_da',
        null::int, p.sequencia, null::text, null::text, p.pago,
-       'pago ' || p.pago::text || ' contra título de ' || p.titulo::text
+       'pago ' || p.pago::text || ' contra título de ' || t.titulo::text
   from (
-    select r.cnpj_orgao, r.sequencia,
-           sum(r.totaldam)                 as pago,
-           max(coalesce(d.total, d.valor)) as titulo
-      from rd r
-      join da d on d.cnpj_orgao = r.cnpj_orgao and d.sequencia = r.sequencia
-     where r.sequencia is not null
-     group by r.cnpj_orgao, r.sequencia
+    select cnpj_orgao, sequencia, sum(totaldam) as pago
+      from rd
+     where sequencia is not null
+     group by cnpj_orgao, sequencia
   ) p
- where p.titulo is not null and p.pago > p.titulo;
+  join (
+    select cnpj_orgao, sequencia, max(coalesce(total, valor)) as titulo
+      from da
+     where sequencia is not null
+     group by cnpj_orgao, sequencia
+  ) t on t.cnpj_orgao = p.cnpj_orgao and t.sequencia = p.sequencia
+ where t.titulo is not null and p.pago > t.titulo;
 
 commit;
 
