@@ -83,8 +83,8 @@ export default function BarraUsuario() {
     ? [
         { href: "/sada", rotulo: "Dashboard", exact: true },
         { href: "/sada/qualidade", rotulo: "Qualidade" },
-        { href: "/sada/completude", rotulo: "Completude do envio" },
-        { href: "/sada/cnpj", rotulo: "Consulta CNPJ" },
+        { href: "/sada/completude", rotulo: "Completude" },
+        { href: "/sada/cnpj", rotulo: "CNPJ" },
         { href: "/sada/depara", rotulo: "DE/PARA" },
         { href: "/sada/atualizacao", rotulo: "Atualização da Dívida" },
       ]
@@ -115,6 +115,9 @@ export default function BarraUsuario() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          // Sem o wrap, numa tela estreita o grupo da direita (perfil, sair)
+          // era empurrado para fora da viewport em vez de descer.
+          flexWrap: "wrap",
           gap: 16,
           padding: "8px 20px",
           background: "var(--escuro)",
@@ -126,11 +129,12 @@ export default function BarraUsuario() {
           zIndex: 50,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link href="/" title="Voltar à página inicial" style={{ display: "flex", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, flex: "1 1 auto" }}>
+          <Link href="/" title="Voltar à página inicial"
+                style={{ display: "flex", alignItems: "center", flex: "0 0 auto" }}>
             <Image src="/logo.svg" alt="Logo" width={34} height={34} style={{ borderRadius: 8 }} />
           </Link>
-          <nav style={{ display: "flex", gap: 4 }}>
+          <nav style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
             {abas.map((a) => {
               const ativa = a.exact ? pathname === a.href : pathname.startsWith(a.href);
               return (
@@ -146,6 +150,7 @@ export default function BarraUsuario() {
                     textTransform: "uppercase",
                     letterSpacing: "0.04em",
                     textDecoration: "none",
+                    whiteSpace: "nowrap",
                     color: ativa ? "var(--escuro)" : "var(--primaria)",
                     background: ativa ? "var(--primaria)" : "transparent",
                   }}
@@ -156,7 +161,7 @@ export default function BarraUsuario() {
             })}
           </nav>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flex: "0 0 auto" }}>
           <button onClick={() => setModalAberto("orgaos")} title="Órgãos cadastrados" style={linkEstilo()}>
             Órgãos
           </button>
