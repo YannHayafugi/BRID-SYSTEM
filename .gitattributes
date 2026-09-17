@@ -1,0 +1,4 @@
+# Scripts de deploy rodam no Linux do VPS: com CRLF o bash falha com
+# "$'\r': command not found". Força LF mesmo quando o checkout é no Windows.
+*.sh   text eol=lf
+*.conf text eol=lf
