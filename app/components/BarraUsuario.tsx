@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -17,17 +17,30 @@ import { corPerfil, NOMES_PERFIL, textoAvatarPerfil } from "@/lib/perfil";
 
 type ModalId = "orgaos" | "historico" | "perfil" | "admin" | null;
 type TipoPerfil = "admin" | "editor" | "visualizador" | null;
+type Aba = { href: string; rotulo: string; exact?: boolean };
 
-/** Barra de navegação principal (D18): Dashboard → Follow-up → Arquivos como
- * abas (Análise TR saiu da navegação fixa — acessada pelo card do Follow-up).
- * Órgãos, Histórico, Administração e Perfil abrem em modal, sem sair da tela
- * atual. Não aparece na tela de login. */
+/**
+ * Barra de navegação principal. Organizada em três zonas, cada uma com um
+ * papel só:
+ *
+ *   [logo · módulo ▾]   [abas do módulo]            [💬 🔔 🌙]  [avatar ▾]
+ *
+ * - Módulo: diz em que sistema o usuário está (Propostas ou SADA) e permite
+ *   trocar. Antes a troca era silenciosa — as abas mudavam sem nenhum rótulo.
+ * - Abas: só navegação do módulo atual, em grupos separados por um divisor.
+ * - Conta: tudo o que é do usuário ou abre modal (perfil, órgãos, histórico,
+ *   administração, sair) fica no menu do avatar, o padrão que as pessoas já
+ *   esperam. Eram cinco controles soltos competindo com as abas.
+ *
+ * Não aparece na tela de login nem na landing.
+ */
 export default function BarraUsuario() {
   const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
   const [tipoPerfil, setTipoPerfil] = useState<TipoPerfil>(null);
   const [ehAdmin, setEhAdmin] = useState(false);
+  const [veSada, setVeSada] = useState(false);
   const [modalAberto, setModalAberto] = useState<ModalId>(null);
 
   useEffect(() => {
@@ -39,16 +52,18 @@ export default function BarraUsuario() {
       if (data.user) {
         const { data: perfil } = await supabase
           .from("gp_profiles")
-          .select("perfil, nome_completo")
+          .select("perfil, nome_completo, is_superadmin, pode_ver_sada")
           .eq("id", data.user.id)
           .single();
         setEhAdmin(perfil?.perfil === "admin");
         setNome(perfil?.nome_completo || null);
         setTipoPerfil((perfil?.perfil as TipoPerfil) || null);
+        setVeSada(!!(perfil?.is_superadmin || perfil?.pode_ver_sada));
       } else {
         setEhAdmin(false);
         setNome(null);
         setTipoPerfil(null);
+        setVeSada(false);
       }
     }
     carregarPerfil();
@@ -70,162 +85,134 @@ export default function BarraUsuario() {
   async function sair() {
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
-    // D52: ao sair, volta para a página inicial (landing com "Acessar o
-    // sistema"). Navegação completa (window.location) para a página atual não
-    // disparar seu próprio redirect de 401 para /login no meio do caminho.
+    // D52: ao sair, volta para a página inicial. Navegação completa
+    // (window.location) para a página atual não disparar seu próprio redirect
+    // de 401 para /login no meio do caminho.
     window.location.href = "/";
   }
 
-  // O SADA é um módulo à parte: dentro de /sada a navegação troca para as
-  // abas do SADA (Dashboard + Atualização da Dívida), sem Follow-up/Arquivos.
+  // O SADA é um módulo à parte: dentro de /sada as abas trocam para as dele.
+  // Grupos: o que se consulta no dia a dia, e o que alimenta a base.
   const emSada = pathname.startsWith("/sada");
-  const abas = emSada
+  const grupos: Aba[][] = emSada
     ? [
-        { href: "/sada", rotulo: "Dashboard", exact: true },
-        { href: "/sada/qualidade", rotulo: "Qualidade" },
-        { href: "/sada/completude", rotulo: "Completude" },
-        { href: "/sada/cnpj", rotulo: "CNPJ" },
-        { href: "/sada/depara", rotulo: "DE/PARA" },
-        { href: "/sada/atualizacao", rotulo: "Atualização da Dívida" },
+        [
+          { href: "/sada", rotulo: "Dashboard", exact: true },
+          { href: "/sada/qualidade", rotulo: "Qualidade" },
+          { href: "/sada/completude", rotulo: "Completude" },
+          { href: "/sada/cnpj", rotulo: "CNPJ" },
+        ],
+        [
+          { href: "/sada/atualizacao", rotulo: "Atualização da dívida" },
+          { href: "/sada/depara", rotulo: "DE/PARA" },
+        ],
       ]
     : [
-        { href: "/dashboard", rotulo: "Dashboard", exact: true },
-        { href: "/followup", rotulo: "Follow-up" },
-        { href: "/arquivos", rotulo: "Arquivos" },
+        [
+          { href: "/dashboard", rotulo: "Dashboard", exact: true },
+          { href: "/followup", rotulo: "Follow-up" },
+          { href: "/arquivos", rotulo: "Arquivos" },
+        ],
       ];
 
-  const linkEstilo = (ativo?: boolean): React.CSSProperties => ({
-    color: "var(--primaria)",
-    fontFamily: "var(--fonte-titulo)",
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.03em",
-    textDecoration: "none",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    fontSize: 12,
-    padding: 0,
-  });
+  const nomeExibido = nome || email;
+  const papel = tipoPerfil ? NOMES_PERFIL[tipoPerfil] : null;
 
   return (
     <>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          // Sem o wrap, numa tela estreita o grupo da direita (perfil, sair)
-          // era empurrado para fora da viewport em vez de descer.
-          flexWrap: "wrap",
-          gap: 16,
-          padding: "8px 20px",
-          background: "var(--escuro)",
-          borderBottom: "1px solid #2a2620",
-          fontSize: 13,
-          color: "#c9c4b6",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, flex: "1 1 auto" }}>
-          <Link href="/" title="Voltar à página inicial"
-                style={{ display: "flex", alignItems: "center", flex: "0 0 auto" }}>
-            <Image src="/logo.svg" alt="Logo" width={34} height={34} style={{ borderRadius: 8 }} />
+      <header className="barra">
+        <div className="barra-inicio">
+          <Link href="/" title="Página inicial" className="barra-logo">
+            <Image src="/logo.svg" alt="GRUPO BRID" width={30} height={30} style={{ borderRadius: 7 }} />
           </Link>
-          <nav style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
-            {abas.map((a) => {
-              const ativa = a.exact ? pathname === a.href : pathname.startsWith(a.href);
-              return (
-                <Link
-                  key={a.href}
-                  href={a.href}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    fontFamily: "var(--fonte-titulo)",
-                    fontWeight: 700,
-                    fontSize: 13,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                    color: ativa ? "var(--escuro)" : "var(--primaria)",
-                    background: ativa ? "var(--primaria)" : "transparent",
-                  }}
-                >
-                  {a.rotulo}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flex: "0 0 auto" }}>
-          <button onClick={() => setModalAberto("orgaos")} title="Órgãos cadastrados" style={linkEstilo()}>
-            Órgãos
-          </button>
-          <button onClick={() => setModalAberto("historico")} title="Histórico de análises de TR" style={linkEstilo()}>
-            Histórico
-          </button>
-          {ehAdmin && (
-            <button onClick={() => setModalAberto("admin")} title="Administração de usuários" style={linkEstilo()}>
-              Administração
-            </button>
-          )}
-          <button
-            onClick={() => setModalAberto("perfil")}
-            title={`Editar nome, e-mail e senha — ${tipoPerfil ? NOMES_PERFIL[tipoPerfil] : "perfil"}`}
-            style={{
-              ...linkEstilo(),
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              textTransform: "none",
-              letterSpacing: 0,
-            }}
-          >
-            <span
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: "50%",
-                background: corPerfil(tipoPerfil),
-                color: textoAvatarPerfil(tipoPerfil),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 12,
-                fontWeight: 800,
-                flexShrink: 0,
-              }}
+
+          {veSada ? (
+            <Suspenso
+              rotuloAcessivel="Trocar de módulo"
+              alinhar="esquerda"
+              gatilho={(aberto) => (
+                <span className="barra-modulo">
+                  {emSada ? "SADA" : "Propostas"}
+                  <Seta aberta={aberto} />
+                </span>
+              )}
             >
-              {(nome || email || "?").trim().charAt(0).toUpperCase()}
-            </span>
-            {nome || email}
-          </button>
-          <FeedbackBotao />
-          <NotificacoesBotao />
-          <ThemeToggle />
-          <button
-            onClick={sair}
-            title="Sair do sistema"
-            style={{
-              background: "none",
-              border: "1px solid #3a3529",
-              borderRadius: 8,
-              padding: "6px 12px",
-              color: "#c9c4b6",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-            Sair
-          </button>
+              {(fechar) => (
+                <>
+                  <ItemLink href="/dashboard" ativo={!emSada} onClick={fechar}
+                            titulo="Gestão de Propostas" desc="Dashboard, follow-up e arquivos" />
+                  <ItemLink href="/sada" ativo={emSada} onClick={fechar}
+                            titulo="SADA — Dívida Ativa" desc="Base, qualidade e atualização" />
+                </>
+              )}
+            </Suspenso>
+          ) : (
+            <span className="barra-modulo estatico">Propostas</span>
+          )}
         </div>
-      </div>
+
+        <nav className="barra-abas" aria-label="Navegação do módulo">
+          {grupos.map((grupo, gi) => (
+            <div key={gi} className="barra-grupo">
+              {grupo.map((a) => {
+                const ativa = a.exact ? pathname === a.href : pathname.startsWith(a.href);
+                return (
+                  <Link key={a.href} href={a.href} className="barra-aba"
+                        aria-current={ativa ? "page" : undefined}>
+                    {a.rotulo}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <div className="barra-fim">
+          <div className="barra-icones">
+            <FeedbackBotao />
+            <NotificacoesBotao />
+            <ThemeToggle />
+          </div>
+
+          <Suspenso
+            rotuloAcessivel="Menu da conta"
+            alinhar="direita"
+            gatilho={(aberto) => (
+              <span className="barra-conta">
+                <Avatar tipo={tipoPerfil} texto={nomeExibido} />
+                <span className="barra-conta-nome">{nomeExibido}</span>
+                <Seta aberta={aberto} />
+              </span>
+            )}
+          >
+            {(fechar) => (
+              <>
+                <div className="suspenso-cabecalho">
+                  <Avatar tipo={tipoPerfil} texto={nomeExibido} grande />
+                  <div style={{ minWidth: 0 }}>
+                    <strong className="suspenso-truncar">{nome || "Sem nome"}</strong>
+                    <span className="suspenso-truncar suspenso-desc">{email}</span>
+                    {papel && <span className="suspenso-papel">{papel}</span>}
+                  </div>
+                </div>
+                <div className="suspenso-divisor" />
+                <ItemBotao titulo="Meu perfil" desc="Nome, e-mail e senha"
+                           onClick={() => { fechar(); setModalAberto("perfil"); }} />
+                <ItemBotao titulo="Órgãos" desc="Entes cadastrados"
+                           onClick={() => { fechar(); setModalAberto("orgaos"); }} />
+                <ItemBotao titulo="Histórico" desc="Análises de TR"
+                           onClick={() => { fechar(); setModalAberto("historico"); }} />
+                {ehAdmin && (
+                  <ItemBotao titulo="Administração" desc="Usuários e permissões"
+                             onClick={() => { fechar(); setModalAberto("admin"); }} />
+                )}
+                <div className="suspenso-divisor" />
+                <ItemBotao titulo="Sair" perigo onClick={() => { fechar(); sair(); }} />
+              </>
+            )}
+          </Suspenso>
+        </div>
+      </header>
 
       {modalAberto === "orgaos" && (
         <Modal titulo="Órgãos" onFechar={() => setModalAberto(null)}>
@@ -248,5 +235,123 @@ export default function BarraUsuario() {
         </Modal>
       )}
     </>
+  );
+}
+
+/**
+ * Menu suspenso. Fecha ao clicar fora, no Escape (devolvendo o foco ao
+ * gatilho, para quem navega por teclado não se perder) e ao escolher um item.
+ */
+function Suspenso({
+  gatilho,
+  children,
+  rotuloAcessivel,
+  alinhar,
+}: {
+  gatilho: (aberto: boolean) => React.ReactNode;
+  children: (fechar: () => void) => React.ReactNode;
+  rotuloAcessivel: string;
+  alinhar: "esquerda" | "direita";
+}) {
+  const [aberto, setAberto] = useState(false);
+  const raiz = useRef<HTMLDivElement>(null);
+  const botao = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const clique = (e: MouseEvent) => {
+      if (raiz.current && !raiz.current.contains(e.target as Node)) setAberto(false);
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAberto(false);
+        botao.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", clique);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", clique);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [aberto]);
+
+  return (
+    <div ref={raiz} className="suspenso-raiz">
+      <button
+        ref={botao}
+        type="button"
+        className="suspenso-gatilho"
+        aria-label={rotuloAcessivel}
+        aria-haspopup="menu"
+        aria-expanded={aberto}
+        onClick={() => setAberto((v) => !v)}
+      >
+        {gatilho(aberto)}
+      </button>
+      {aberto && (
+        <div role="menu" className={`suspenso ${alinhar}`}>
+          {children(() => setAberto(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ItemLink({ href, titulo, desc, ativo, onClick }: {
+  href: string; titulo: string; desc?: string; ativo?: boolean; onClick: () => void;
+}) {
+  return (
+    <Link href={href} role="menuitem" className="suspenso-item" onClick={onClick}
+          aria-current={ativo ? "page" : undefined}>
+      <span>{titulo}</span>
+      {desc && <span className="suspenso-desc">{desc}</span>}
+    </Link>
+  );
+}
+
+function ItemBotao({ titulo, desc, perigo, onClick }: {
+  titulo: string; desc?: string; perigo?: boolean; onClick: () => void;
+}) {
+  return (
+    <button type="button" role="menuitem" onClick={onClick}
+            className={`suspenso-item${perigo ? " perigo" : ""}`}>
+      <span>{titulo}</span>
+      {desc && <span className="suspenso-desc">{desc}</span>}
+    </button>
+  );
+}
+
+function Avatar({ tipo, texto, grande }: { tipo: TipoPerfil; texto: string | null; grande?: boolean }) {
+  const tam = grande ? 36 : 28;
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: tam,
+        height: tam,
+        borderRadius: "50%",
+        background: corPerfil(tipo),
+        color: textoAvatarPerfil(tipo),
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: grande ? 15 : 12,
+        fontWeight: 800,
+        flexShrink: 0,
+      }}
+    >
+      {(texto || "?").trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function Seta({ aberta }: { aberta: boolean }) {
+  return (
+    <svg aria-hidden width="10" height="10" viewBox="0 0 10 10" className="barra-seta"
+         style={{ transform: aberta ? "rotate(180deg)" : "none" }}>
+      <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.6"
+            strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

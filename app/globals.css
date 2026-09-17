@@ -648,3 +648,206 @@ textarea {
   margin-top: 4px;
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------------
+   Barra superior (BarraUsuario). Fundo escuro fixo nos dois temas.
+   Três zonas: módulo | abas | ícones + conta.
+   --------------------------------------------------------------------- */
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 56px;
+  padding: 0 20px;
+  background: var(--escuro);
+  border-bottom: 1px solid #2a2620;
+  color: #c9c4b6;
+  font-size: 13px;
+}
+.barra-inicio,
+.barra-fim {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.barra-inicio { gap: 12px; }
+.barra-fim { gap: 14px; margin-left: auto; }
+.barra-logo { display: flex; align-items: center; }
+
+.barra-modulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primaria);
+}
+.suspenso-gatilho:hover .barra-modulo { background: #221f18; }
+.barra-modulo.estatico { padding-left: 0; }
+
+/* Abas: rolam na horizontal em vez de quebrar em várias linhas. */
+.barra-abas {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.barra-abas::-webkit-scrollbar { display: none; }
+.barra-grupo { display: flex; align-items: stretch; gap: 2px; }
+.barra-grupo + .barra-grupo {
+  margin-left: 12px;
+  padding-left: 12px;
+  position: relative;
+}
+.barra-grupo + .barra-grupo::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 18px;
+  transform: translateY(-50%);
+  border-left: 1px solid #3a3529;
+}
+.barra-aba {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  white-space: nowrap;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  color: #a39c8a;
+  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.barra-aba:hover { color: #f0ede4; }
+.barra-aba[aria-current="page"] {
+  color: #fff;
+  border-bottom-color: var(--primaria);
+}
+
+.barra-icones { display: flex; align-items: center; gap: 8px; }
+.barra-seta { transition: transform 0.15s; flex-shrink: 0; }
+
+.barra-conta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 999px;
+  color: #f0ede4;
+  font-weight: 600;
+  font-size: 13px;
+}
+.suspenso-gatilho:hover .barra-conta { background: #221f18; }
+.barra-conta-nome {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Menu suspenso */
+.suspenso-raiz { position: relative; }
+.suspenso-gatilho {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.suspenso-gatilho:focus-visible,
+.barra-aba:focus-visible,
+.suspenso-item:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.suspenso {
+  position: absolute;
+  top: calc(100% + 10px);
+  min-width: 240px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: #1c1a14;
+  border: 1px solid #3a3529;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 60;
+}
+.suspenso.esquerda { left: 0; }
+.suspenso.direita { right: 0; }
+.suspenso-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0ede4;
+}
+.suspenso-item:hover { background: #2a2620; }
+.suspenso-item[aria-current="page"] { box-shadow: inset 2px 0 0 var(--primaria); }
+.suspenso-item.perigo { color: #f08a7a; }
+.suspenso-desc {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: #8d8778;
+}
+.suspenso-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  color: #f0ede4;
+}
+.suspenso-truncar {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+.suspenso-papel {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primaria);
+  background: #2a2410;
+}
+.suspenso-divisor { height: 1px; margin: 6px 4px; background: #2a2620; }
+
+/* Estreito: abas descem para uma segunda linha inteira (e rolam), o nome
+   some e fica só o avatar. */
+@media (max-width: 900px) {
+  .barra { flex-wrap: wrap; row-gap: 0; padding: 0 12px; }
+  .barra-inicio, .barra-fim { min-height: 52px; }
+  .barra-abas { order: 3; flex-basis: 100%; height: 42px; border-top: 1px solid #2a2620; }
+  .barra-conta-nome { display: none; }
+}
