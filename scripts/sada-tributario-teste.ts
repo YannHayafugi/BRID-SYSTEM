@@ -10,9 +10,16 @@
  *
  * Rodar:  npx tsx scripts/sada-tributario-teste.ts
  */
-import { encargosEsperados, mesesAtraso, type RegraTributaria } from "../lib/sada/tributario";
+import {
+  encargosEsperados,
+  limitesVigentes,
+  mesesAtraso,
+  regraAplicavel,
+  type RegraTributaria,
+} from "../lib/sada/tributario";
 
 const regra: RegraTributaria = {
+  nivel: "municipal",
   cnpjOrgao: "99999999000199",
   tributo: "*",
   vigenciaInicio: "2010-01-01",
@@ -30,6 +37,26 @@ const regra: RegraTributaria = {
   toleranciaReais: 1,
   fundamento: "TESTE",
   observacao: null,
+  tetoMultaPct: null,
+  tetoJurosPctMes: null,
+  anosPrescricao: null,
+};
+
+/** Lei geral como está no banco: só limites e juros supletivos, sem multa. */
+const leiGeral: RegraTributaria = {
+  ...regra,
+  nivel: "geral",
+  cnpjOrgao: null,
+  tributo: "*",
+  vigenciaInicio: "1966-10-25",
+  multaPct: null,
+  jurosPctMes: 1,
+  correcaoIndice: null,
+  correcaoPctAA: null,
+  fundamento: "CTN arts. 161 §1º e 174",
+  tetoMultaPct: 20,
+  tetoJurosPctMes: 1,
+  anosPrescricao: 5,
 };
 
 const DATA_BASE = new Date(Date.UTC(2024, 11, 31));
@@ -90,8 +117,40 @@ const prog: RegraTributaria = { ...regra, multaTipo: "progressiva", multaPct: 0.
 igual("progressiva 10 meses", "multa", encargosEsperados(prog, 1000, 10).multa, 33);
 igual("progressiva 120 meses (teto)", "multa", encargosEsperados(prog, 1000, 120).multa, 200);
 
+// Precedência e limites: os mesmos casos conferidos no Postgres quando a
+// lei geral entrou (ver o commit que criou o nível 'geral').
+const iptuMunicipal: RegraTributaria = { ...regra, tributo: "IPTU", multaPct: 2, jurosPctMes: 0.5 };
+const todosMunicipal: RegraTributaria = { ...regra, tributo: "*", multaPct: 10 };
+const todas = [leiGeral, iptuMunicipal, todosMunicipal];
+
+const escolhida = (tributo: string, cnpj: string | null) =>
+  regraAplicavel(todas, cnpj, tributo, "2023-01-01");
+
+const conferir = (nome: string, obtido: unknown, esperado: unknown) => {
+  if (obtido !== esperado) {
+    falhas++;
+    console.error(`FALHOU  ${nome}: obtido ${String(obtido)}, esperado ${String(esperado)}`);
+  }
+};
+
+// IPTU do ente: a municipal do tributo ganha da municipal '*' e da geral.
+conferir("precedência IPTU", escolhida("IPTU", regra.cnpjOrgao)?.multaPct, 2);
+// ISS do mesmo ente: cai na municipal '*'.
+conferir("precedência ISS", escolhida("ISS", regra.cnpjOrgao)?.multaPct, 10);
+// Ente sem lei municipal: sobra a geral — sem multa a esperar, juros de 1%.
+conferir("ente sem lei municipal", escolhida("IPTU", "11111111000111")?.nivel, "geral");
+conferir("lei geral não fixa multa", encargosEsperados(leiGeral, 1000, 23).multa, null);
+conferir("juros supletivos do CTN", encargosEsperados(leiGeral, 1000, 23).juros, 230);
+// O teto vem SEMPRE da lei geral, mesmo quando a municipal manda no esperado.
+conferir("teto de multa", limitesVigentes(todas, "IPTU", "2023-01-01").tetoMultaPct, 20);
+conferir("teto de juros", limitesVigentes(todas, "IPTU", "2023-01-01").tetoJurosPctMes, 1);
+conferir("prazo de prescrição", limitesVigentes(todas, "IPTU", "2023-01-01").anosPrescricao, 5);
+
 if (falhas > 0) {
   console.error(`\n${falhas} divergência(s).`);
   process.exit(1);
 }
-console.log(`OK — ${CASOS.length} casos do banco + SELIC + multa progressiva conferem.`);
+console.log(
+  `OK — ${CASOS.length} casos do banco + SELIC + multa progressiva + precedência ` +
+    "lei geral/municipal e limites conferem.",
+);

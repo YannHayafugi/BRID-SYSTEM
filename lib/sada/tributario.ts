@@ -17,28 +17,46 @@
 
 export const TRIBUTO_TODOS = "*";
 
-/** Teto de multa de mora que a jurisprudência admite (caráter não confiscatório). */
+/**
+ * Limites de emergência: valem só enquanto NÃO houver lei geral cadastrada.
+ * O normal é o teto vir da regra de nível 'geral' vigente na data — é assim
+ * que a view trabalha, e é assim que uma mudança de lei geral se propaga sem
+ * mexer em código.
+ */
+/** Multa de mora que a jurisprudência admite (caráter não confiscatório). */
 export const TETO_MULTA_PCT = 20;
-/** Juros de mora do CTN art. 161 §1º quando a lei do ente não dispõe. */
+/** Juros de mora do CTN art. 161 §1º quando a lei não dispõe de modo diverso. */
 export const TETO_JUROS_PCT_MES = 1;
 /** CTN art. 174: prescrição em 5 anos, salvo interrupção. */
 export const ANOS_PRESCRICAO = 5;
 
 export type MultaTipo = "unica" | "progressiva";
 export type JurosModo = "mensal" | "selic";
+/**
+ * "geral": lei geral — vale para todos os entes. Traz os LIMITES que nenhuma
+ * lei municipal afasta (multa de 20%, juros de 1% ao mês, prescrição em 5
+ * anos) e a regra SUPLETIVA, usada quando o município não tem lei cadastrada
+ * (CTN art. 161 §1º: 1% ao mês "se a lei não dispuser de modo diverso").
+ * "municipal": o Código Tributário daquele município. Prevalece no cálculo do
+ * esperado, mas não afasta os limites.
+ */
+export type NivelRegra = "geral" | "municipal";
 
 export interface RegraTributaria {
   id?: number;
-  cnpjOrgao: string;
+  nivel: NivelRegra;
+  /** Nulo na lei geral; obrigatório na municipal. */
+  cnpjOrgao: string | null;
   /** Sigla canônica (IPTU, ISS...) ou "*" para todos os tributos do ente. */
   tributo: string;
   vigenciaInicio: string;         // AAAA-MM-DD
   vigenciaFim: string | null;
   multaTipo: MultaTipo;
-  multaPct: number;
+  /** Nulo = não há percentual a conferir (o caso da lei geral, que só põe teto). */
+  multaPct: number | null;
   multaTetoPct: number | null;    // só faz sentido em 'progressiva'
   jurosModo: JurosModo;
-  jurosPctMes: number;
+  jurosPctMes: number | null;
   selicMediaAA: number | null;
   correcaoIndice: string | null;
   correcaoPctAA: number | null;
@@ -47,6 +65,10 @@ export interface RegraTributaria {
   toleranciaReais: number;
   fundamento: string | null;
   observacao: string | null;
+  /** Limites — só na lei geral; nulos na municipal. */
+  tetoMultaPct: number | null;
+  tetoJurosPctMes: number | null;
+  anosPrescricao: number | null;
 }
 
 export interface VerificacaoTributaria {
@@ -58,7 +80,7 @@ export interface VerificacaoTributaria {
   fundamento?: string;
   /** `erro`: está errado. `alerta`: pode estar certo, mas precisa de olho. */
   gravidade: "erro" | "alerta";
-  /** Só aparece quando existe regra cadastrada para o ente. */
+  /** Só tem ocorrência quando a regra aplicável traz o percentual a comparar. */
   dependeDeRegra: boolean;
 }
 
@@ -74,23 +96,23 @@ export const VERIFICACOES: VerificacaoTributaria[] = [
   },
   {
     codigo: "trib_multa_divergente",
-    rotulo: "Multa fora da regra do ente",
+    rotulo: "Multa fora da regra aplicável",
     explicacao:
-      "A multa informada não bate com a alíquota cadastrada para o tributo na data de vencimento.",
+      "A multa informada não bate com a alíquota da regra que vale para o tributo na data de vencimento (a lei municipal, quando cadastrada; senão a geral).",
     gravidade: "erro",
     dependeDeRegra: true,
   },
   {
     codigo: "trib_juros_divergente",
-    rotulo: "Juros fora da regra do ente",
+    rotulo: "Juros fora da regra aplicável",
     explicacao:
-      "Os juros informados não batem com a taxa cadastrada aplicada aos meses de atraso.",
+      "Os juros informados não batem com a taxa da regra que vale para a dívida, aplicada aos meses de atraso.",
     gravidade: "erro",
     dependeDeRegra: true,
   },
   {
     codigo: "trib_correcao_divergente",
-    rotulo: "Correção fora da regra do ente",
+    rotulo: "Correção fora da regra aplicável",
     explicacao:
       "A atualização monetária informada não bate com o índice anual cadastrado para o período.",
     gravidade: "erro",
@@ -98,18 +120,18 @@ export const VERIFICACOES: VerificacaoTributaria[] = [
   },
   {
     codigo: "trib_multa_teto",
-    rotulo: "Multa acima de 20% do principal",
+    rotulo: "Multa acima do teto da lei geral",
     explicacao:
-      "Multa de mora acima do patamar que a jurisprudência aceita como não confiscatório.",
+      "Multa de mora acima do limite da lei geral (20% por padrão). Lei municipal não afasta o teto.",
     fundamento: "STF, multa de mora não confiscatória (limite de 20%)",
     gravidade: "erro",
     dependeDeRegra: false,
   },
   {
     codigo: "trib_juros_teto",
-    rotulo: "Juros acima de 1% ao mês",
+    rotulo: "Juros acima do teto da lei geral",
     explicacao:
-      "Juros informados acima de 1% ao mês de atraso, sem lei do ente que autorize taxa maior.",
+      "Juros acima do limite da lei geral por mês de atraso (1% por padrão).",
     fundamento: "CTN art. 161 §1º",
     gravidade: "erro",
     dependeDeRegra: false,
@@ -118,16 +140,25 @@ export const VERIFICACOES: VerificacaoTributaria[] = [
     codigo: "trib_selic_e_correcao",
     rotulo: "SELIC somada à correção",
     explicacao:
-      "O ente usa SELIC, que já engloba juros e correção, mas a linha traz atualização à parte — a diferença é cobrada duas vezes.",
+      "A regra aplicável usa SELIC, que já engloba juros e correção, mas a linha traz atualização à parte — a diferença é cobrada duas vezes.",
     fundamento: "Lei 9.430/96 art. 61 §3º, por analogia",
     gravidade: "erro",
     dependeDeRegra: true,
   },
   {
-    codigo: "trib_sem_regra",
-    rotulo: "Encargos sem regra cadastrada",
+    codigo: "trib_so_lei_geral",
+    rotulo: "Conferida só pela lei geral",
     explicacao:
-      "A linha tem multa, juros ou correção, mas não há regra vigente cadastrada para conferir. É cobertura da validação, não erro do dado.",
+      "O município não tem lei cadastrada para este tributo e período: a linha foi conferida pelo padrão supletivo do CTN. É cobertura da validação, não erro do dado.",
+    fundamento: "CTN art. 161 §1º",
+    gravidade: "alerta",
+    dependeDeRegra: false,
+  },
+  {
+    codigo: "trib_sem_regra",
+    rotulo: "Sem nenhuma regra aplicável",
+    explicacao:
+      "Nem a lei municipal nem a geral cobrem a data desta dívida — verifique a vigência das regras cadastradas.",
     gravidade: "alerta",
     dependeDeRegra: false,
   },
@@ -149,9 +180,9 @@ export const VERIFICACOES: VerificacaoTributaria[] = [
   },
   {
     codigo: "trib_prescricao",
-    rotulo: "Vencida há mais de 5 anos",
+    rotulo: "Prazo de prescrição vencido",
     explicacao:
-      "Prazo de prescrição vencido na data-base. Só é problema se não houve interrupção (parcelamento, citação, confissão).",
+      "Passou o prazo da lei geral (5 anos por padrão) entre o vencimento e a data-base. Só é problema se não houve interrupção (parcelamento, citação, confissão).",
     fundamento: "CTN art. 174",
     gravidade: "alerta",
     dependeDeRegra: false,
@@ -208,18 +239,25 @@ export function encargosEsperados(
 ): EncargosEsperados {
   const semDado = meses === null || !Number.isFinite(principal);
 
-  const multa = semDado
-    ? null
-    : regra.multaTipo === "progressiva"
-      ? centavos(
-          (principal * Math.min(regra.multaPct * (meses as number), regra.multaTetoPct ?? TETO_MULTA_PCT)) / 100,
-        )
-      : centavos((principal * regra.multaPct) / 100);
+  // Percentual não cadastrado: nada a esperar. É o caso da lei geral, que
+  // fixa o teto da multa mas não a alíquota — essa é sempre municipal.
+  const multa =
+    semDado || regra.multaPct === null
+      ? null
+      : regra.multaTipo === "progressiva"
+        ? centavos(
+            (principal *
+              Math.min(regra.multaPct * (meses as number), regra.multaTetoPct ?? TETO_MULTA_PCT)) /
+              100,
+          )
+        : centavos((principal * regra.multaPct) / 100);
 
   const juros = semDado
     ? null
     : regra.jurosModo === "mensal"
-      ? centavos((principal * regra.jurosPctMes * (meses as number)) / 100)
+      ? regra.jurosPctMes === null
+        ? null
+        : centavos((principal * regra.jurosPctMes * (meses as number)) / 100)
       : regra.selicMediaAA !== null
         ? centavos(principal * (Math.pow(1 + regra.selicMediaAA / 100, (meses as number) / 12) - 1))
         : null;
@@ -243,18 +281,47 @@ export function encargosEsperados(
   };
 }
 
-/** Regra que vale para um tributo numa data: a específica ganha da genérica. */
+/**
+ * Regra que vale para uma dívida, na mesma ordem que a view usa:
+ * municipal+tributo > municipal+'*' > geral+tributo > geral+'*'; dentro do
+ * mesmo nível, a vigência mais recente que cobre a data.
+ */
 export function regraAplicavel(
   regras: RegraTributaria[],
+  cnpjOrgao: string | null,
   tributo: string | null,
   data: string,
 ): RegraTributaria | null {
   const candidatas = regras
+    .filter((r) => r.nivel === "geral" || (cnpjOrgao !== null && r.cnpjOrgao === cnpjOrgao))
+    .filter((r) => r.tributo === TRIBUTO_TODOS || r.tributo === tributo)
+    .filter((r) => r.vigenciaInicio <= data && (!r.vigenciaFim || r.vigenciaFim >= data))
+    .sort((a, b) => {
+      const nivel = Number(b.nivel === "municipal") - Number(a.nivel === "municipal");
+      if (nivel !== 0) return nivel;
+      const espec = Number(b.tributo !== TRIBUTO_TODOS) - Number(a.tributo !== TRIBUTO_TODOS);
+      return espec !== 0 ? espec : b.vigenciaInicio.localeCompare(a.vigenciaInicio);
+    });
+  return candidatas[0] ?? null;
+}
+
+/** Limites vigentes numa data: sempre da lei geral, nunca da municipal. */
+export function limitesVigentes(
+  regras: RegraTributaria[],
+  tributo: string | null,
+  data: string,
+): { tetoMultaPct: number; tetoJurosPctMes: number; anosPrescricao: number } {
+  const geral = regras
+    .filter((r) => r.nivel === "geral")
     .filter((r) => r.tributo === TRIBUTO_TODOS || r.tributo === tributo)
     .filter((r) => r.vigenciaInicio <= data && (!r.vigenciaFim || r.vigenciaFim >= data))
     .sort((a, b) => {
       const espec = Number(b.tributo !== TRIBUTO_TODOS) - Number(a.tributo !== TRIBUTO_TODOS);
       return espec !== 0 ? espec : b.vigenciaInicio.localeCompare(a.vigenciaInicio);
-    });
-  return candidatas[0] ?? null;
+    })[0];
+  return {
+    tetoMultaPct: geral?.tetoMultaPct ?? TETO_MULTA_PCT,
+    tetoJurosPctMes: geral?.tetoJurosPctMes ?? TETO_JUROS_PCT_MES,
+    anosPrescricao: geral?.anosPrescricao ?? ANOS_PRESCRICAO,
+  };
 }

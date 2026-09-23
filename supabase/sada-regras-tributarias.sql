@@ -1,25 +1,42 @@
 -- =====================================================================
--- SADA · Regras tributárias por ente e validação das fórmulas
+-- SADA · Regras tributárias (lei geral + lei municipal) e validação
 --
 -- O que este arquivo cria:
---   1. sada_regra_tributaria          cadastro das alíquotas de cada ente
+--   1. sada_regra_tributaria          cadastro das regras, em dois níveis
 --   2. sada_vw_regra_linha            casa cada linha da DA com a regra vigente
 --   3. sada_vw_validacao_tributaria   resumo: uma linha por verificação/ente
 --   4. sada_vw_validacao_linhas       o detalhe, para a tela e o xlsx
+--   5. a lei geral inicial (CTN + jurisprudência)
 --
--- POR QUE POR ENTE: multa, juros e índice de correção da dívida ativa saem do
--- Código Tributário de cada município. O CTN fixa só o piso e o teto (art. 161
--- §1º: juros de 1% ao mês quando a lei não dispuser de outro modo); o resto é
--- lei municipal, e muda de cidade para cidade e ao longo do tempo. Por isso o
--- cadastro tem VIGÊNCIA: dívida de 2016 tem de ser conferida com a lei de
--- 2016, não com a de hoje.
+-- DOIS NÍVEIS:
+--
+--   LEI GERAL (nivel = 'geral', sem CNPJ) — vale para todos os entes. Traz
+--   duas coisas: os LIMITES que nenhuma lei municipal pode ultrapassar (multa
+--   de 20%, juros de 1% ao mês, prescrição em 5 anos) e a regra SUPLETIVA,
+--   usada quando o município não tem lei cadastrada — é o que diz o CTN art.
+--   161 §1º: juros de 1% ao mês "se a lei não dispuser de modo diverso".
+--
+--   LEI MUNICIPAL (nivel = 'municipal', com CNPJ) — as alíquotas do Código
+--   Tributário daquele município. Prevalece sobre a geral no cálculo do
+--   esperado, mas NÃO afasta os limites: multa municipal de 30% continua sendo
+--   apontada como acima do teto.
+--
+-- ORDEM DE PRECEDÊNCIA, da mais forte para a mais fraca:
+--   1. municipal + tributo específico (ex.: IPTU daquele ente)
+--   2. municipal + '*' (todos os tributos do ente)
+--   3. geral + tributo específico
+--   4. geral + '*'
+-- Dentro do mesmo nível, ganha a vigência mais recente que cobre a data.
+--
+-- VIGÊNCIA: dívida de 2016 é conferida com a lei de 2016, não com a de hoje.
 --
 -- DATA-BASE DA CONFERÊNCIA: a planilha é uma foto do estoque. Tomamos como
 -- data-base 31/12 do último ano do lote (`ano_fim` da importação vigente, ou o
 -- `ano` da própria linha quando ele falta). Não é exato — o ente pode ter
 -- extraído em outro dia — e é por isso que toda comparação tem tolerância.
 --
--- Idempotente: pode rodar de novo.
+-- Idempotente: pode rodar de novo, inclusive sobre a versão anterior deste
+-- arquivo (que não tinha o nível geral).
 -- =====================================================================
 
 begin;
@@ -29,69 +46,90 @@ begin;
 -- ---------------------------------------------------------------------
 create table if not exists public.sada_regra_tributaria (
   id             bigint generated always as identity primary key,
-  -- SOMENTE DÍGITOS, como em sada_depara: a API normaliza na gravação e na
-  -- busca, senão o mesmo ente vira dois cadastros e a regra não é encontrada.
-  cnpj_orgao     text not null,
-  -- Sigla canônica do tributo (IPTU, ISS, TAXA...) ou '*' para "todos os
-  -- tributos do ente". A regra específica ganha da genérica.
+  cnpj_orgao     text,
   tributo        text not null default '*',
   vigencia_inicio date not null,
-  vigencia_fim    date,                       -- null = ainda em vigor
-
-  -- MULTA de mora. 'unica': percentual aplicado uma vez sobre o principal.
-  -- 'progressiva': percentual POR MÊS de atraso, limitado por multa_teto_pct.
+  vigencia_fim    date,
   multa_tipo     text not null default 'unica'
                    check (multa_tipo in ('unica', 'progressiva')),
-  multa_pct      numeric(6,3) not null default 0,
-  multa_teto_pct numeric(6,3),                -- só para 'progressiva'
-
-  -- JUROS. 'mensal': taxa fixa ao mês (o caso do art. 161 §1º do CTN).
-  -- 'selic': a SELIC já engloba correção e juros — somar os dois é cobrança
-  -- em duplicidade, e a validação verifica justamente isso.
+  multa_pct      numeric(6,3),
+  multa_teto_pct numeric(6,3),
   juros_modo     text not null default 'mensal'
                    check (juros_modo in ('mensal', 'selic')),
-  juros_pct_mes  numeric(6,3) not null default 1,
-  -- Média anual da SELIC usada só como APROXIMAÇÃO quando juros_modo='selic'
-  -- (não temos a série mês a mês). Sem ela, a conferência de juros é pulada.
+  juros_pct_mes  numeric(6,3),
   selic_media_aa numeric(6,3),
-
-  -- CORREÇÃO monetária: o nome do índice é documental; a conferência usa a
-  -- taxa média anual informada. Sem taxa, a correção não é recalculada.
-  correcao_indice  text,                      -- IPCA, IPCA-E, IGP-M, UFM...
+  correcao_indice  text,
   correcao_pct_aa  numeric(6,3),
-
-  honorarios_pct numeric(6,3),                -- encargo de cobrança, se houver
-
-  -- Tolerância da comparação. Vale a maior entre as duas: percentual sobre o
-  -- valor esperado e um piso em reais, que evita apontar diferença de centavo.
+  honorarios_pct numeric(6,3),
   tolerancia_pct   numeric(6,3) not null default 5,
   tolerancia_reais numeric(12,2) not null default 1,
-
-  fundamento     text,                        -- "Lei Municipal 1.234/2015, art. 8º"
+  fundamento     text,
   observacao     text,
   criado_por     uuid references public.gp_profiles (id),
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
-
-  unique (cnpj_orgao, tributo, vigencia_inicio),
   check (vigencia_fim is null or vigencia_fim >= vigencia_inicio)
 );
+
+-- Migração da versão anterior (só tinha regra municipal, com cnpj not null).
+alter table public.sada_regra_tributaria
+  add column if not exists nivel text not null default 'municipal',
+  -- Limites da LEI GERAL. Ficam nulos nas regras municipais: quem manda no
+  -- teto é a lei geral vigente, não o município conferido.
+  add column if not exists teto_multa_pct      numeric(6,3),
+  add column if not exists teto_juros_pct_mes  numeric(6,3),
+  add column if not exists anos_prescricao     smallint;
+
+alter table public.sada_regra_tributaria alter column cnpj_orgao    drop not null;
+alter table public.sada_regra_tributaria alter column multa_pct     drop not null;
+alter table public.sada_regra_tributaria alter column juros_pct_mes drop not null;
+alter table public.sada_regra_tributaria alter column multa_pct     drop default;
+alter table public.sada_regra_tributaria alter column juros_pct_mes drop default;
+
+do $$ begin
+  alter table public.sada_regra_tributaria
+    add constraint sada_regra_nivel_chk check (nivel in ('geral', 'municipal'));
+exception when duplicate_object then null; end $$;
+
+-- Geral não tem CNPJ; municipal exige um. Sem isto, uma regra geral gravada
+-- com CNPJ viraria regra municipal silenciosa — e vice-versa.
+do $$ begin
+  alter table public.sada_regra_tributaria
+    add constraint sada_regra_nivel_cnpj_chk check (
+      (nivel = 'geral'     and cnpj_orgao is null) or
+      (nivel = 'municipal' and cnpj_orgao is not null));
+exception when duplicate_object then null; end $$;
+
+-- A unicidade antiga era (cnpj_orgao, tributo, vigencia_inicio) e não cobre
+-- cnpj nulo: em Postgres, nulos nunca colidem, e daria para gravar duas leis
+-- gerais iguais. O índice de expressão resolve.
+alter table public.sada_regra_tributaria
+  drop constraint if exists sada_regra_tributaria_cnpj_orgao_tributo_vigencia_inicio_key;
+create unique index if not exists idx_sada_regra_chave
+  on public.sada_regra_tributaria (coalesce(cnpj_orgao, '*'), tributo, vigencia_inicio);
 
 create index if not exists idx_sada_regra_ente
   on public.sada_regra_tributaria (cnpj_orgao, tributo, vigencia_inicio desc);
 
 comment on table public.sada_regra_tributaria is
-  'Alíquotas de multa, juros e correção da dívida ativa, por ente, tributo e '
-  'período de vigência. Base da validação de fórmulas (sada_vw_validacao_*).';
+  'Regras da validação tributária em dois níveis: lei geral (limites e regra '
+  'supletiva, sem CNPJ) e lei municipal (alíquotas do ente). A municipal '
+  'prevalece no esperado; os limites vêm sempre da geral.';
 
 -- ---------------------------------------------------------------------
--- 2. Cada linha da dívida ativa vigente com a regra aplicável e os
---    valores esperados. É a base das duas views seguintes.
+-- 2. Cada linha da dívida ativa vigente com a regra aplicável, os limites
+--    da lei geral e os valores esperados.
 -- ---------------------------------------------------------------------
-create or replace view public.sada_vw_regra_linha as
+-- As três views são recriadas do zero: o Postgres recusa um
+-- `create or replace view` que acrescente coluna no meio (a versão anterior
+-- não tinha regra_nivel), e as duas de baixo dependem desta.
+drop view if exists public.sada_vw_validacao_linhas;
+drop view if exists public.sada_vw_validacao_tributaria;
+drop view if exists public.sada_vw_regra_linha;
+
+create view public.sada_vw_regra_linha as
 with da as (
   select d.*,
-         -- Data-base da foto: ver cabeçalho do arquivo.
          make_date(coalesce(i.ano_fim, d.ano), 12, 31) as data_base
     from public.sada_divida_ativa d
     join public.sada_importacoes i
@@ -117,42 +155,65 @@ with da as (
 ), com_regra as (
   select b.*,
          r.id            as regra_id,
+         r.nivel         as regra_nivel,
          r.tributo       as regra_tributo,
          r.multa_tipo, r.multa_pct, r.multa_teto_pct,
          r.juros_modo, r.juros_pct_mes, r.selic_media_aa,
          r.correcao_indice, r.correcao_pct_aa,
-         r.tolerancia_pct, r.tolerancia_reais
+         r.tolerancia_pct, r.tolerancia_reais,
+         -- Limites: sempre da lei geral vigente na data de vencimento. Os
+         -- coalesce são a rede de segurança para uma base sem lei geral
+         -- cadastrada — valem os números do CTN e da jurisprudência.
+         coalesce(g.teto_multa_pct, 20)    as teto_multa_pct,
+         coalesce(g.teto_juros_pct_mes, 1) as teto_juros_pct_mes,
+         coalesce(g.anos_prescricao, 5)    as anos_prescricao
     from base b
-    -- lateral + order by: entre as regras que cobrem a data de vencimento,
-    -- vence a do tributo específico sobre a genérica ('*') e, dentro disso,
-    -- a de vigência mais recente.
+    -- Regra do esperado: municipal ganha da geral, específica ganha da '*',
+    -- e dentro disso vale a vigência mais recente que cobre o vencimento.
     left join lateral (
       select r.*
         from public.sada_regra_tributaria r
-       where r.cnpj_orgao = b.cnpj_orgao
+       where (r.cnpj_orgao = b.cnpj_orgao or r.cnpj_orgao is null)
          and (r.tributo = '*' or r.tributo = b.sigla)
          and b.data_venc is not null
          and r.vigencia_inicio <= b.data_venc
          and (r.vigencia_fim is null or r.vigencia_fim >= b.data_venc)
-       order by (r.tributo <> '*') desc, r.vigencia_inicio desc
+       order by (r.cnpj_orgao is not null) desc,
+                (r.tributo <> '*') desc,
+                r.vigencia_inicio desc
        limit 1
     ) r on true
+    -- Limites, em consulta própria: mesmo quando a municipal ganha, o teto
+    -- continua sendo o da lei geral.
+    left join lateral (
+      select g.*
+        from public.sada_regra_tributaria g
+       where g.nivel = 'geral'
+         and (g.tributo = '*' or g.tributo = b.sigla)
+         and b.data_venc is not null
+         and g.vigencia_inicio <= b.data_venc
+         and (g.vigencia_fim is null or g.vigencia_fim >= b.data_venc)
+       order by (g.tributo <> '*') desc, g.vigencia_inicio desc
+       limit 1
+    ) g on true
 )
 select
   c.*,
-  -- MULTA esperada. Progressiva: percentual por mês, limitado ao teto.
-  case when c.regra_id is null or c.valor is null or c.meses_atraso is null then null
+  -- MULTA esperada. Sem percentual cadastrado (o caso da lei geral, que não
+  -- fixa multa — só o teto), não há o que comparar.
+  case when c.regra_id is null or c.valor is null or c.meses_atraso is null
+         or c.multa_pct is null then null
        when c.multa_tipo = 'progressiva'
-         then round(c.valor * least(c.multa_pct * coalesce(c.meses_atraso, 0),
-                                    coalesce(c.multa_teto_pct, 20)) / 100, 2)
+         then round(c.valor * least(c.multa_pct * c.meses_atraso,
+                                    coalesce(c.multa_teto_pct, c.teto_multa_pct)) / 100, 2)
        else round(c.valor * c.multa_pct / 100, 2)
   end as multa_esperada,
   -- JUROS esperados. Mensal: juros simples, como manda o CTN. SELIC: só dá
   -- para aproximar se a média anual foi informada.
   case when c.regra_id is null or c.valor is null or c.meses_atraso is null then null
-       when c.juros_modo = 'mensal'
+       when c.juros_modo = 'mensal' and c.juros_pct_mes is not null
          then round(c.valor * c.juros_pct_mes / 100 * c.meses_atraso, 2)
-       when c.selic_media_aa is not null
+       when c.juros_modo = 'selic' and c.selic_media_aa is not null
          then round(c.valor * (power(1 + c.selic_media_aa / 100, c.meses_atraso / 12.0) - 1), 2)
   end as juros_esperado,
   -- CORREÇÃO esperada, composta ao ano. Em SELIC não há correção à parte.
@@ -164,8 +225,8 @@ select
   from com_regra c;
 
 comment on view public.sada_vw_regra_linha is
-  'Dívida ativa vigente + regra tributária aplicável + encargos esperados. '
-  'Pesada: use sempre com filtro de cnpj_orgao.';
+  'Dívida ativa vigente + regra aplicável (municipal ou geral) + limites da '
+  'lei geral + encargos esperados. Pesada: use sempre com filtro de cnpj_orgao.';
 
 -- ---------------------------------------------------------------------
 -- 3. Resumo — uma linha por verificação e por ente, no padrão de
@@ -173,22 +234,21 @@ comment on view public.sada_vw_regra_linha is
 --
 --    Códigos e o que cada um quer dizer:
 --      trib_total_soma        total ≠ principal + atualização + juros + multa
---      trib_multa_divergente  multa fora da tolerância da regra do ente
+--      trib_multa_divergente  multa fora da tolerância da regra aplicável
 --      trib_juros_divergente  juros fora da tolerância
 --      trib_correcao_divergente  correção fora da tolerância
---      trib_multa_teto        multa acima de 20% do principal
---      trib_juros_teto        juros acima de 1% ao mês de atraso
---      trib_selic_e_correcao  ente usa SELIC e a linha traz correção à parte
---      trib_sem_regra         linha com encargos e nenhuma regra cadastrada
+--      trib_multa_teto        multa acima do teto da lei geral
+--      trib_juros_teto        juros acima do teto da lei geral
+--      trib_selic_e_correcao  regra usa SELIC e a linha traz correção à parte
+--      trib_so_lei_geral      conferida só pela lei geral (ente sem lei cadastrada)
+--      trib_sem_regra         nenhuma regra cobre a linha, nem a geral
 --      trib_venc_invalido     mês/ano de vencimento ausente ou impossível
 --      trib_venc_futuro       vencimento depois da data-base da foto
---      trib_prescricao        mais de 5 anos vencida (CTN art. 174)
+--      trib_prescricao        prazo de prescrição vencido na data-base
 -- ---------------------------------------------------------------------
-create or replace view public.sada_vw_validacao_tributaria as
+create view public.sada_vw_validacao_tributaria as
 with l as (
   select *,
-         -- Tolerância em reais para cada comparação: a maior entre o piso e o
-         -- percentual sobre o esperado.
          greatest(coalesce(tolerancia_reais, 1),
                   coalesce(multa_esperada, 0) * coalesce(tolerancia_pct, 5) / 100) as tol_multa,
          greatest(coalesce(tolerancia_reais, 1),
@@ -212,26 +272,31 @@ with l as (
            where correcao_esperada is not null and atualizacao is not null
              and juros_modo <> 'selic'
              and abs(atualizacao - correcao_esperada) > tol_corr) as c_corr,
-         -- Tetos: valem mesmo sem regra cadastrada. 20% é o limite que a
-         -- jurisprudência admite para multa de mora; 1% a.m. é o do CTN.
          count(*) filter (
            where multa is not null and valor is not null and valor > 0
-             and multa > valor * 0.20 + 1) as c_multa_teto,
+             and multa > valor * teto_multa_pct / 100 + 1) as c_multa_teto,
          count(*) filter (
            where juros is not null and valor is not null and valor > 0
              and meses_atraso is not null and meses_atraso > 0
-             and juros > valor * 0.01 * meses_atraso + 1) as c_juros_teto,
+             and juros > valor * teto_juros_pct_mes / 100 * meses_atraso + 1) as c_juros_teto,
          count(*) filter (
            where juros_modo = 'selic'
              and atualizacao is not null and atualizacao > 0) as c_selic,
+         -- Cobertura: a linha foi conferida pelo padrão do CTN porque o
+         -- município não tem lei cadastrada. Não é erro do dado.
          count(*) filter (
-           -- data_venc nula já sai em trib_venc_invalido; repetir aqui como
-           -- "sem regra" mandaria cadastrar regra que não resolveria nada.
+           where regra_nivel = 'geral'
+             and (multa is not null or juros is not null or atualizacao is not null)) as c_so_geral,
+         -- data_venc nula já sai em trib_venc_invalido; repetir aqui como
+         -- "sem regra" mandaria cadastrar regra que não resolveria nada.
+         count(*) filter (
            where regra_id is null and data_venc is not null
              and (multa is not null or juros is not null or atualizacao is not null)) as c_sem_regra,
          count(*) filter (where data_venc is null) as c_venc,
          count(*) filter (where data_venc is not null and data_venc > data_base) as c_futuro,
-         count(*) filter (where meses_atraso is not null and meses_atraso > 60) as c_prescr
+         count(*) filter (
+           where meses_atraso is not null
+             and meses_atraso > anos_prescricao * 12) as c_prescr
     from l
    group by cnpj_orgao
 )
@@ -241,32 +306,34 @@ select a.cnpj_orgao, v.codigo, v.categoria, v.tabela, v.problema, v.qtd, a.base
     ('trib_total_soma'::text, 'tributario'::text, 'divida_ativa'::text,
      'Total diferente de principal + atualização + juros + multa'::text, a.c_soma),
     ('trib_multa_divergente', 'tributario', 'divida_ativa',
-     'Multa fora da regra cadastrada para o ente', a.c_multa),
+     'Multa fora da regra aplicável', a.c_multa),
     ('trib_juros_divergente', 'tributario', 'divida_ativa',
-     'Juros fora da regra cadastrada para o ente', a.c_juros),
+     'Juros fora da regra aplicável', a.c_juros),
     ('trib_correcao_divergente', 'tributario', 'divida_ativa',
-     'Correção monetária fora da regra cadastrada', a.c_corr),
+     'Correção monetária fora da regra aplicável', a.c_corr),
     ('trib_multa_teto', 'tributario', 'divida_ativa',
-     'Multa acima de 20% do principal', a.c_multa_teto),
+     'Multa acima do teto da lei geral', a.c_multa_teto),
     ('trib_juros_teto', 'tributario', 'divida_ativa',
-     'Juros acima de 1% ao mês de atraso (CTN art. 161 §1º)', a.c_juros_teto),
+     'Juros acima do teto da lei geral (CTN art. 161 §1º)', a.c_juros_teto),
     ('trib_selic_e_correcao', 'tributario', 'divida_ativa',
-     'Ente usa SELIC e a linha traz correção à parte (duplicidade)', a.c_selic),
+     'Regra usa SELIC e a linha traz correção à parte (duplicidade)', a.c_selic),
+    ('trib_so_lei_geral', 'tributario', 'divida_ativa',
+     'Conferida só pela lei geral — ente sem lei municipal cadastrada', a.c_so_geral),
     ('trib_sem_regra', 'tributario', 'divida_ativa',
-     'Linha com encargos sem regra tributária cadastrada', a.c_sem_regra),
+     'Nenhuma regra cobre a linha, nem a lei geral', a.c_sem_regra),
     ('trib_venc_invalido', 'tributario', 'divida_ativa',
      'Vencimento ausente ou impossível', a.c_venc),
     ('trib_venc_futuro', 'tributario', 'divida_ativa',
      'Vencimento depois da data-base da importação', a.c_futuro),
     ('trib_prescricao', 'tributario', 'divida_ativa',
-     'Vencida há mais de 5 anos (CTN art. 174 — verificar interrupção)', a.c_prescr)
+     'Prazo de prescrição vencido (CTN art. 174 — verificar interrupção)', a.c_prescr)
   ) v(codigo, categoria, tabela, problema, qtd);
 
 -- ---------------------------------------------------------------------
 -- 4. Detalhe — as linhas por trás de cada código, com o esperado ao lado
 --    do informado. Sempre consultada com filtro de código, ente e limite.
 -- ---------------------------------------------------------------------
-create or replace view public.sada_vw_validacao_linhas as
+create view public.sada_vw_validacao_linhas as
 with l as (
   select *,
          greatest(coalesce(tolerancia_reais, 1),
@@ -295,19 +362,22 @@ with l as (
          and juros_modo <> 'selic' and abs(atualizacao - correcao_esperada) > tol_corr),
       ('trib_multa_teto',
        multa is not null and valor is not null and valor > 0
-         and multa > valor * 0.20 + 1),
+         and multa > valor * teto_multa_pct / 100 + 1),
       ('trib_juros_teto',
        juros is not null and valor is not null and valor > 0
          and meses_atraso is not null and meses_atraso > 0
-         and juros > valor * 0.01 * meses_atraso + 1),
+         and juros > valor * teto_juros_pct_mes / 100 * meses_atraso + 1),
       ('trib_selic_e_correcao',
        juros_modo = 'selic' and atualizacao is not null and atualizacao > 0),
+      ('trib_so_lei_geral',
+       regra_nivel = 'geral'
+         and (multa is not null or juros is not null or atualizacao is not null)),
       ('trib_sem_regra',
        regra_id is null and data_venc is not null
          and (multa is not null or juros is not null or atualizacao is not null)),
       ('trib_venc_invalido', data_venc is null),
       ('trib_venc_futuro',   data_venc is not null and data_venc > data_base),
-      ('trib_prescricao',    meses_atraso is not null and meses_atraso > 60)
+      ('trib_prescricao',    meses_atraso is not null and meses_atraso > anos_prescricao * 12)
     ) v(codigo, bate)
    where v.bate
 )
@@ -315,8 +385,34 @@ select cnpj_orgao, codigo, ano, sequencia, sigla, inscricao, cnpj_cpf,
        mes_venc, ano_venc, meses_atraso,
        valor, atualizacao, juros, multa, total,
        multa_esperada, juros_esperado, correcao_esperada,
-       regra_id, regra_tributo
+       regra_id, regra_nivel, regra_tributo
   from marcada;
+
+-- ---------------------------------------------------------------------
+-- 5. Lei geral inicial.
+--
+--    Sem multa: a lei federal não fixa alíquota de multa de mora municipal —
+--    só o teto. Com juros de 1% ao mês, que é o supletivo do CTN. Sem índice
+--    de correção, que também é da lei local.
+--
+--    Vigência desde o CTN (Lei 5.172, de 25/10/1966). Se a lei geral mudar,
+--    NÃO edite esta linha: cadastre outra com o novo início de vigência e
+--    feche esta pelo campo de fim — senão a dívida antiga passa a ser
+--    conferida com a lei nova.
+-- ---------------------------------------------------------------------
+insert into public.sada_regra_tributaria
+  (nivel, cnpj_orgao, tributo, vigencia_inicio,
+   multa_tipo, multa_pct, juros_modo, juros_pct_mes,
+   teto_multa_pct, teto_juros_pct_mes, anos_prescricao,
+   tolerancia_pct, tolerancia_reais, fundamento, observacao)
+values
+  ('geral', null, '*', date '1966-10-25',
+   'unica', null, 'mensal', 1,
+   20, 1, 5,
+   5, 1,
+   'CTN arts. 161 §1º e 174; STF, multa de mora limitada a 20%',
+   'Regra supletiva e limites. A lei municipal prevalece no cálculo do esperado, mas não afasta os limites.')
+on conflict do nothing;
 
 commit;
 
