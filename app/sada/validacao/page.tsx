@@ -6,9 +6,9 @@
  *   Resultado      — o que a base vigente tem de errado ou suspeito, uma linha
  *                    por verificação; expandir lista as dívidas, com o valor
  *                    esperado ao lado do informado, e baixa em .xlsx.
- *   Regras do ente — multa, juros e correção de cada ente, por tributo e
- *                    período de vigência, com um simulador para conferir a
- *                    regra antes de salvar.
+ *   Regras         — a lei geral (limites e regra supletiva, para todos os
+ *                    entes) e as leis municipais, por tributo e período de
+ *                    vigência, com um simulador para conferir antes de salvar.
  *
  * A conferência linha a linha roda no banco (sada_vw_validacao_*); esta tela
  * só pede o resumo e o detalhe. O simulador usa a mesma matemática em
@@ -18,12 +18,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
-  ANOS_PRESCRICAO,
   encargosEsperados,
+  limitesVigentes,
   mesesAtraso,
   TRIBUTO_TODOS,
   type JurosModo,
   type MultaTipo,
+  type NivelRegra,
   type RegraTributaria,
 } from "@/lib/sada/tributario";
 
@@ -51,32 +52,55 @@ type Linha = Record<string, unknown>;
 
 const ABAS = [
   { id: "resultado", rotulo: "Resultado" },
-  { id: "regras", rotulo: "Regras do ente" },
+  { id: "regras", rotulo: "Regras" },
 ] as const;
 type Aba = (typeof ABAS)[number]["id"];
 
-/** Regra nova: os padrões são os do CTN, que valem quando a lei do ente cala. */
-function regraVazia(cnpj: string): RegraTributaria {
+/**
+ * Regra nova. Os padrões são os do CTN, que valem quando a lei local cala.
+ * A lei geral nasce sem alíquota de multa de propósito: a lei federal não
+ * fixa multa de mora municipal — só o teto.
+ */
+function regraVazia(nivel: NivelRegra, cnpj: string | null): RegraTributaria {
+  const geral = nivel === "geral";
   return {
-    cnpjOrgao: cnpj,
+    nivel,
+    cnpjOrgao: geral ? null : cnpj,
     tributo: TRIBUTO_TODOS,
     vigenciaInicio: "",
     vigenciaFim: null,
     multaTipo: "unica",
-    multaPct: 20,
+    multaPct: geral ? null : 20,
     multaTetoPct: null,
     jurosModo: "mensal",
     jurosPctMes: 1,
     selicMediaAA: null,
-    correcaoIndice: "IPCA",
+    correcaoIndice: geral ? null : "IPCA",
     correcaoPctAA: null,
     honorariosPct: null,
     toleranciaPct: 5,
     toleranciaReais: 1,
     fundamento: null,
     observacao: null,
+    tetoMultaPct: geral ? 20 : null,
+    tetoJurosPctMes: geral ? 1 : null,
+    anosPrescricao: geral ? 5 : null,
   };
 }
+
+/** Lei geral primeiro: é o pano de fundo das municipais. */
+function ordenar(regras: RegraTributaria[]): RegraTributaria[] {
+  return [...regras].sort(
+    (a, b) =>
+      Number(a.nivel === "municipal") - Number(b.nivel === "municipal") ||
+      (a.cnpjOrgao ?? "").localeCompare(b.cnpjOrgao ?? "") ||
+      a.tributo.localeCompare(b.tributo) ||
+      b.vigenciaInicio.localeCompare(a.vigenciaInicio),
+  );
+}
+
+/** Data de hoje em AAAA-MM-DD, para resolver limites de uma regra ainda sem vigência. */
+const hoje = () => new Date().toISOString().slice(0, 10);
 
 const brl = (v: unknown) =>
   v === null || v === undefined || v === ""
@@ -143,7 +167,7 @@ export default function ValidacaoTributariaPage() {
       .then(async (r) => {
         const j = await r.json();
         if (!r.ok) throw new Error(j.erro || "Falha ao carregar as regras.");
-        setRegras(j.regras ?? []);
+        setRegras(ordenar(j.regras ?? []));
       })
       .catch((e) => setErro((e as Error).message));
   }, [qs]);
@@ -188,15 +212,7 @@ export default function ValidacaoTributariaPage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro || "Falha ao salvar.");
-      setRegras((atual) => {
-        const outras = (atual ?? []).filter((x) => x.id !== j.regra.id);
-        return [...outras, j.regra].sort(
-          (a, b) =>
-            a.cnpjOrgao.localeCompare(b.cnpjOrgao) ||
-            a.tributo.localeCompare(b.tributo) ||
-            b.vigenciaInicio.localeCompare(a.vigenciaInicio),
-        );
-      });
+      setRegras((atual) => ordenar([...(atual ?? []).filter((x) => x.id !== j.regra.id), j.regra]));
       setRascunho(null);
     } catch (e) {
       setErro((e as Error).message);
@@ -206,7 +222,7 @@ export default function ValidacaoTributariaPage() {
   }
 
   async function excluirRegra(id: number) {
-    if (!confirm("Excluir esta regra? A validação volta a apontar as linhas como sem regra.")) return;
+    if (!confirm("Excluir esta regra? As dívidas que dependiam dela passam a ser conferidas pela regra de nível abaixo (ou por nenhuma).")) return;
     setErro("");
     try {
       const r = await fetch(`/api/sada/regras?id=${id}`, { method: "DELETE" });
@@ -226,9 +242,9 @@ export default function ValidacaoTributariaPage() {
         <div>
           <h1>Validação tributária</h1>
           <p className="sub">
-            Confere as fórmulas e os valores da dívida ativa contra a regra de
-            cada ente: multa, juros, correção monetária, tetos legais e prazo de
-            prescrição ({ANOS_PRESCRICAO} anos).
+            Confere as fórmulas e os valores da dívida ativa contra a regra
+            aplicável: a lei municipal do ente quando cadastrada, senão a lei
+            geral. Multa, juros, correção monetária, tetos legais e prescrição.
           </p>
         </div>
         <Link href="/sada" className="landing-cta secundario">← Dashboard</Link>
@@ -358,49 +374,63 @@ export default function ValidacaoTributariaPage() {
       {aba === "regras" && (
         <section className="card">
           <p className="sub" style={{ marginTop: 0 }}>
-            As alíquotas saem do Código Tributário de cada município. Cadastre
-            uma regra por período de vigência: dívida de 2016 é conferida com a
-            lei de 2016. Sem regra cadastrada, só valem as verificações que não
-            dependem dela (aritmética, tetos legais, datas).
+            Dois níveis. A <strong>lei geral</strong> vale para todos os entes:
+            traz os limites que nenhuma lei municipal afasta (multa, juros,
+            prescrição) e a regra supletiva do CTN, usada onde o município não
+            tem lei cadastrada. A <strong>lei municipal</strong> traz as
+            alíquotas do Código Tributário do ente e prevalece no cálculo do
+            esperado — mas não afasta os limites. Cadastre uma regra por
+            período de vigência: dívida de 2016 é conferida com a lei de 2016.
           </p>
 
-          {!cliente && (
-            <p className="vazio">Selecione um cliente para ver e cadastrar as regras.</p>
-          )}
-
-          {cliente && regras && (
+          {regras && (
             <>
               <table className="sada-tabela">
                 <thead>
                   <tr>
-                    <th>CNPJ</th><th>Tributo</th><th>Vigência</th><th>Multa</th>
-                    <th>Juros</th><th>Correção</th><th>Fundamento</th><th></th>
+                    <th>Nível</th><th>Tributo</th><th>Vigência</th><th>Multa</th>
+                    <th>Juros</th><th>Correção</th><th>Limites</th>
+                    <th>Fundamento</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {regras.length === 0 && (
-                    <tr><td colSpan={8} className="vazio">Nenhuma regra cadastrada.</td></tr>
+                    <tr><td colSpan={9} className="vazio">Nenhuma regra cadastrada.</td></tr>
                   )}
                   {regras.map((r) => (
                     <tr key={r.id}>
-                      <td>{r.cnpjOrgao}</td>
+                      <td>
+                        {r.nivel === "geral" ? "Lei geral" : "Lei municipal"}
+                        {r.cnpjOrgao && (
+                          <span className="detalhe" style={{ display: "block" }}>{r.cnpjOrgao}</span>
+                        )}
+                      </td>
                       <td>{r.tributo === TRIBUTO_TODOS ? "todos" : r.tributo}</td>
                       <td>
                         {r.vigenciaInicio}
                         {r.vigenciaFim ? ` a ${r.vigenciaFim}` : " em diante"}
                       </td>
                       <td>
-                        {r.multaPct}%{r.multaTipo === "progressiva" ? ` ao mês (teto ${r.multaTetoPct ?? "—"}%)` : ""}
+                        {r.multaPct === null
+                          ? "—"
+                          : `${r.multaPct}%${r.multaTipo === "progressiva" ? ` ao mês (teto ${r.multaTetoPct ?? "—"}%)` : ""}`}
                       </td>
                       <td>
                         {r.jurosModo === "selic"
                           ? `SELIC${r.selicMediaAA !== null ? ` (~${r.selicMediaAA}% a.a.)` : ""}`
-                          : `${r.jurosPctMes}% ao mês`}
+                          : r.jurosPctMes === null
+                            ? "—"
+                            : `${r.jurosPctMes}% ao mês`}
                       </td>
                       <td>
                         {r.jurosModo === "selic"
                           ? "embutida na SELIC"
                           : `${r.correcaoIndice ?? "—"}${r.correcaoPctAA !== null ? ` ${r.correcaoPctAA}% a.a.` : " (sem taxa)"}`}
+                      </td>
+                      <td>
+                        {r.nivel === "geral"
+                          ? `multa ${r.tetoMultaPct ?? "—"}% · juros ${r.tetoJurosPctMes ?? "—"}%/mês · prescrição ${r.anosPrescricao ?? "—"} anos`
+                          : "—"}
                       </td>
                       <td>{r.fundamento ?? "—"}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
@@ -412,15 +442,28 @@ export default function ValidacaoTributariaPage() {
                 </tbody>
               </table>
 
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   className="btn"
-                  onClick={() => setRascunho(regraVazia(cnpjsDoCliente[0]?.cnpj ?? ""))}
+                  onClick={() => setRascunho(regraVazia("municipal", cnpjsDoCliente[0]?.cnpj ?? ""))}
                   disabled={cnpjsDoCliente.length === 0}
+                  title={cnpjsDoCliente.length === 0 ? "Selecione um cliente com CNPJ vinculado" : undefined}
                 >
-                  Nova regra
+                  Nova lei municipal
+                </button>
+                <button
+                  className="btn secondary"
+                  onClick={() => setRascunho(regraVazia("geral", null))}
+                >
+                  Nova lei geral
                 </button>
               </div>
+              {cnpjsDoCliente.length === 0 && (
+                <p className="detalhe" style={{ marginTop: 8 }}>
+                  Selecione um cliente para cadastrar lei municipal. A lei geral
+                  aparece e pode ser editada em qualquer seleção.
+                </p>
+              )}
             </>
           )}
 
@@ -428,6 +471,7 @@ export default function ValidacaoTributariaPage() {
             <FormularioRegra
               regra={rascunho}
               cnpjs={cnpjsDoCliente}
+              limites={limitesVigentes(regras ?? [], rascunho.tributo, rascunho.vigenciaInicio || hoje())}
               salvando={salvando}
               onMudar={setRascunho}
               onSalvar={salvarRegra}
@@ -436,6 +480,7 @@ export default function ValidacaoTributariaPage() {
           )}
         </section>
       )}
+
     </main>
   );
 }
@@ -445,6 +490,7 @@ export default function ValidacaoTributariaPage() {
 function FormularioRegra({
   regra,
   cnpjs,
+  limites,
   salvando,
   onMudar,
   onSalvar,
@@ -452,11 +498,13 @@ function FormularioRegra({
 }: {
   regra: RegraTributaria;
   cnpjs: { id: number; cnpj: string; apelido: string | null }[];
+  limites: { tetoMultaPct: number; tetoJurosPctMes: number; anosPrescricao: number };
   salvando: boolean;
   onMudar: (r: RegraTributaria) => void;
   onSalvar: () => void;
   onCancelar: () => void;
 }) {
+  const geral = regra.nivel === "geral";
   const [sim, setSim] = useState({ principal: 1000, mes: 1, ano: new Date().getFullYear() - 2 });
 
   const mudar = <K extends keyof RegraTributaria>(campo: K, valor: RegraTributaria[K]) =>
@@ -472,17 +520,28 @@ function FormularioRegra({
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
-      <h3 style={{ marginTop: 0 }}>{regra.id ? "Editar regra" : "Nova regra"}</h3>
+      <h3 style={{ marginTop: 0 }}>
+        {regra.id ? "Editar" : "Nova"} {geral ? "lei geral" : "lei municipal"}
+      </h3>
+      {geral && (
+        <p className="detalhe" style={{ marginTop: 0 }}>
+          Vale para todos os entes. Se a lei geral mudar, não edite esta: cadastre
+          outra com o novo início de vigência e feche esta pelo campo de fim —
+          senão a dívida antiga passa a ser conferida com a lei nova.
+        </p>
+      )}
 
       <div className="depara-filtros">
-        <div className="field">
-          <label>CNPJ do ente</label>
-          <select value={regra.cnpjOrgao} onChange={(e) => mudar("cnpjOrgao", e.target.value)}>
-            {cnpjs.map((c) => (
-              <option key={c.id} value={c.cnpj}>{c.apelido ? `${c.apelido} — ${c.cnpj}` : c.cnpj}</option>
-            ))}
-          </select>
-        </div>
+        {!geral && (
+          <div className="field">
+            <label>CNPJ do ente</label>
+            <select value={regra.cnpjOrgao ?? ""} onChange={(e) => mudar("cnpjOrgao", e.target.value)}>
+              {cnpjs.map((c) => (
+                <option key={c.id} value={c.cnpj}>{c.apelido ? `${c.apelido} — ${c.cnpj}` : c.cnpj}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="field">
           <label>Tributo</label>
           <input
@@ -510,8 +569,11 @@ function FormularioRegra({
           </select>
         </div>
         <div className="field">
-          <label>{regra.multaTipo === "progressiva" ? "Multa % ao mês" : "Multa %"}</label>
-          <input value={String(regra.multaPct)} onChange={(e) => mudar("multaPct", numero(e.target.value) ?? 0)} />
+          <label>
+            {regra.multaTipo === "progressiva" ? "Multa % ao mês" : "Multa %"}
+            {geral ? " (deixe vazio: a alíquota é municipal)" : ""}
+          </label>
+          <input value={regra.multaPct ?? ""} onChange={(e) => mudar("multaPct", numero(e.target.value))} />
         </div>
         {regra.multaTipo === "progressiva" && (
           <div className="field">
@@ -531,8 +593,8 @@ function FormularioRegra({
         </div>
         {regra.jurosModo === "mensal" ? (
           <div className="field">
-            <label>Juros % ao mês</label>
-            <input value={String(regra.jurosPctMes)} onChange={(e) => mudar("jurosPctMes", numero(e.target.value) ?? 0)} />
+            <label>Juros % ao mês{geral ? " (supletivo)" : ""}</label>
+            <input value={regra.jurosPctMes ?? ""} onChange={(e) => mudar("jurosPctMes", numero(e.target.value))} />
           </div>
         ) : (
           <div className="field">
@@ -553,6 +615,23 @@ function FormularioRegra({
           </>
         )}
       </div>
+
+      {geral && (
+        <div className="depara-filtros">
+          <div className="field">
+            <label>Teto da multa %</label>
+            <input value={regra.tetoMultaPct ?? ""} onChange={(e) => mudar("tetoMultaPct", numero(e.target.value))} />
+          </div>
+          <div className="field">
+            <label>Teto dos juros % ao mês</label>
+            <input value={regra.tetoJurosPctMes ?? ""} onChange={(e) => mudar("tetoJurosPctMes", numero(e.target.value))} />
+          </div>
+          <div className="field">
+            <label>Prescrição (anos)</label>
+            <input value={regra.anosPrescricao ?? ""} onChange={(e) => mudar("anosPrescricao", numero(e.target.value))} />
+          </div>
+        </div>
+      )}
 
       <div className="depara-filtros">
         <div className="field">
@@ -595,11 +674,20 @@ function FormularioRegra({
             Vencimento inválido ou posterior à data-base: não há encargo a esperar.
           </p>
         ) : (
-          <p className="detalhe">
-            {meses} meses de atraso · multa {brl(esperado.multa)} · juros {brl(esperado.juros)} ·
-            correção {esperado.correcao === null ? "sem taxa cadastrada" : brl(esperado.correcao)} ·
-            <strong> total esperado {brl(somaSim)}</strong>
-          </p>
+          <>
+            <p className="detalhe">
+              {meses} meses de atraso · multa{" "}
+              {esperado.multa === null ? "sem alíquota cadastrada" : brl(esperado.multa)} · juros{" "}
+              {esperado.juros === null ? "sem taxa cadastrada" : brl(esperado.juros)} · correção{" "}
+              {esperado.correcao === null ? "sem taxa cadastrada" : brl(esperado.correcao)} ·
+              <strong> total esperado {brl(somaSim)}</strong>
+            </p>
+            <p className="detalhe">
+              Limites em vigor (da lei geral): multa até {limites.tetoMultaPct}% ·
+              juros até {limites.tetoJurosPctMes}% ao mês · prescrição em{" "}
+              {limites.anosPrescricao} anos.
+            </p>
+          </>
         )}
       </div>
 
