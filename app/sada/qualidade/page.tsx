@@ -43,6 +43,8 @@ const ROTULO_CATEGORIA: Record<string, string> = {
   valor: "Valores inválidos",
   campo_chave: "Campos-chave vazios",
   incoerencia: "Incoerência",
+  // Vem da view de validação tributária, somada aqui no mesmo resumo.
+  tributario: "Validação tributária",
 };
 
 const ABAS = [

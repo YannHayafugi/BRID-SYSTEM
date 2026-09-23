@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { cnpjsDoFiltro } from "@/lib/sada/clientes";
+import { ehCodigoTributario, VERIFICACAO_POR_CODIGO } from "@/lib/sada/tributario";
 
 export const runtime = "nodejs";
 
@@ -81,6 +82,32 @@ export async function GET(req: NextRequest) {
       porCodigo.set(codigoLinha, atual);
     }
 
+    // A validação tributária vive em view própria (ela cruza a base com o
+    // cadastro de regras do ente), mas aparece aqui no mesmo resumo: para
+    // quem usa, "multa fora da regra" é um problema de qualidade como os
+    // outros, e o export xlsx da tela já sai pronto.
+    let qt = sb.from("sada_vw_validacao_tributaria").select("codigo, qtd, base");
+    if (cnpjs) qt = qt.in("cnpj_orgao", cnpjs);
+    const { data: trib, error: erroTrib } = await qt;
+    if (erroTrib) return NextResponse.json({ erro: erroTrib.message }, { status: 500 });
+
+    for (const t of trib ?? []) {
+      const cod = String(t.codigo);
+      const v = VERIFICACAO_POR_CODIGO.get(cod);
+      if (!v) continue;
+      const atual = porCodigo.get(cod) ?? {
+        codigo: cod,
+        categoria: "tributario",
+        tabela: "divida_ativa",
+        problema: v.rotulo,
+        qtd: 0,
+        base: 0,
+      };
+      atual.qtd += num(t.qtd);
+      atual.base += num(t.base);
+      porCodigo.set(cod, atual);
+    }
+
     const checks = Array.from(porCodigo.values())
       .map((c) => ({ ...c, pct: c.base > 0 ? Math.round((10000 * c.qtd) / c.base) / 100 : 0 }))
       .sort((a, b) => b.qtd - a.qtd);
@@ -99,6 +126,27 @@ export async function GET(req: NextRequest) {
     if (!codigo) {
       return NextResponse.json({ erro: "Informe o codigo da verificação." }, { status: 400 });
     }
+    // Código de validação tributária: o detalhe mora na outra view, com as
+    // colunas de esperado x informado.
+    if (ehCodigoTributario(codigo)) {
+      let qv = sb
+        .from("sada_vw_validacao_linhas")
+        .select(
+          "cnpj_orgao, codigo, ano, sequencia, sigla, inscricao, cnpj_cpf, mes_venc, ano_venc, " +
+            "meses_atraso, valor, atualizacao, juros, multa, total, multa_esperada, " +
+            "juros_esperado, correcao_esperada",
+        )
+        .eq("codigo", codigo)
+        .limit(limite + 1);
+      if (cnpjs) qv = qv.in("cnpj_orgao", cnpjs);
+      const { data, error } = await qv;
+      if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+      return NextResponse.json({
+        linhas: (data ?? []).slice(0, limite),
+        truncado: (data ?? []).length > limite,
+      });
+    }
+
     let q = sb
       .from("sada_vw_qualidade_linhas")
       .select("cnpj_orgao, codigo, tabela, ano, sequencia, sigla, inscricao, cnpj_cpf, valor, detalhe")

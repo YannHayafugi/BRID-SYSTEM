@@ -99,6 +99,7 @@ export default function BarraUsuario() {
         [
           { href: "/sada", rotulo: "Dashboard", exact: true },
           { href: "/sada/qualidade", rotulo: "Qualidade" },
+          { href: "/sada/validacao", rotulo: "Validação" },
           { href: "/sada/completude", rotulo: "Completude" },
           { href: "/sada/cnpj", rotulo: "CNPJ" },
         ],
