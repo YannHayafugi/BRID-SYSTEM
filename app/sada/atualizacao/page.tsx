@@ -27,6 +27,8 @@ interface ConfigDePara {
   padrao: boolean;
   /** Nomes de todos os mapas do ente+tipo — alimenta o seletor. */
   nomes: string[];
+  /** Campos obrigatórios dispensados neste mapa. */
+  opcionais: string[];
   pares: { campo: "sigla" | "fase"; valor_origem: string; valor_canonico: string }[];
 }
 
@@ -110,6 +112,7 @@ export default function AtualizacaoDivida() {
       abas: j.depara.abas ?? null,
       padrao: !!j.padrao,
       nomes: j.nomes ?? [],
+      opcionais: j.depara.campos_opcionais ?? [],
       pares: rv.ok
         ? (jv.pares ?? []).filter((p: { campo: string }) => p.campo === "sigla" || p.campo === "fase")
         : [],
@@ -175,7 +178,13 @@ export default function AtualizacaoDivida() {
             arquivo: buffer,
             tipo,
             cnpj: cnpjLimpo,
-            cfg: { mapa: cfg.mapa, abasModo: cfg.abasModo, abas: cfg.abas, pares: cfg.pares },
+            cfg: {
+              mapa: cfg.mapa,
+              abasModo: cfg.abasModo,
+              abas: cfg.abas,
+              opcionais: cfg.opcionais,
+              pares: cfg.pares,
+            },
           },
           [buffer],
         );

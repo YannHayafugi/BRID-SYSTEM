@@ -42,6 +42,8 @@ export interface ConfigWorker {
   mapa: Mapa;
   abasModo: AbasModo;
   abas: AbaEscolhida[] | null;
+  /** Campos obrigatórios dispensados neste mapa (sada_depara.campos_opcionais). */
+  opcionais: string[];
   pares: { campo: "sigla" | "fase"; valor_origem: string; valor_canonico: string }[];
 }
 
@@ -60,7 +62,9 @@ export type DoWorker =
   | { tipo: "erro"; mensagem: string };
 
 interface AbaLida {
-  ano: number;
+  /** Ano da aba. Em "ano_na_coluna" é nulo: o ano vem de cada linha. */
+  ano: number | null;
+  nome: string;
   linhas: unknown[][];
   compilado: MapaCompilado;
 }
@@ -70,6 +74,7 @@ interface AbaLida {
 let abas: AbaLida[] = [];
 let tipoAtual: TipoSada = "divida_ativa";
 let cnpjAtual = "";
+let modoAtual: AbasModo = "ano_no_nome";
 let valores = compilarValores([]);
 let cancelado = false;
 
@@ -81,7 +86,9 @@ function traduzir(aba: AbaLida, linha: unknown[]): Record<string, unknown> {
   if ("sigla" in reg) reg.sigla = valores.aplicar("sigla", reg.sigla);
   if ("fase" in reg) reg.fase = valores.aplicar("fase", reg.fase);
   reg.cnpj_orgao = cnpjAtual;
-  reg.ano = aba.ano;
+  // Em "ano_na_coluna" o ano ja veio do mapa, linha a linha: sobrescrever aqui
+  // era justamente o que obrigava todo arquivo a ser organizado por ano.
+  if (aba.ano !== null) reg.ano = aba.ano;
   return reg;
 }
 
@@ -89,6 +96,7 @@ function analisar(msg: Extract<ParaWorker, { acao: "analisar" }>) {
   cancelado = false;
   tipoAtual = msg.tipo;
   cnpjAtual = msg.cnpj;
+  modoAtual = msg.cfg.abasModo;
   valores = compilarValores(msg.cfg.pares);
 
   avisar({ tipo: "status", texto: "Abrindo a planilha…" });
@@ -107,18 +115,27 @@ function analisar(msg: Extract<ParaWorker, { acao: "analisar" }>) {
     cellStyles: false,
   });
 
-  const escolhidas: { nome: string; ano: number }[] =
+  // Quais abas entram, e de onde sai o ano de cada uma.
+  const escolhidas: { nome: string; ano: number | null }[] =
     msg.cfg.abasModo === "abas_escolhidas"
       ? (msg.cfg.abas ?? []).filter((a) => wb.SheetNames.includes(a.nome))
-      : wb.SheetNames
-          .map((nome) => ({ nome, ano: parseInt(nome, 10) }))
-          .filter((a) => Number.isFinite(a.ano));
+      : msg.cfg.abasModo === "ano_na_coluna"
+        // Sem lista cadastrada entram todas: neste modo a aba nao precisa
+        // significar nada, entao nao ha o que filtrar.
+        ? (msg.cfg.abas && msg.cfg.abas.length > 0
+            ? msg.cfg.abas
+                .filter((a) => wb.SheetNames.includes(a.nome))
+                .map((a) => ({ nome: a.nome, ano: null }))
+            : wb.SheetNames.map((nome) => ({ nome, ano: null })))
+        : wb.SheetNames
+            .map((nome) => ({ nome, ano: parseInt(nome, 10) }))
+            .filter((a) => Number.isFinite(a.ano));
 
   if (escolhidas.length === 0) {
     throw new Error(
-      msg.cfg.abasModo === "abas_escolhidas"
-        ? "Nenhuma das abas configuradas no DE/PARA existe neste arquivo."
-        : "Nenhuma aba com nome de ano. Se este ente usa outro formato, configure em DE/PARA.",
+      msg.cfg.abasModo === "ano_no_nome"
+        ? "Nenhuma aba com nome de ano. Se este ente usa outro formato, configure em DE/PARA."
+        : "Nenhuma das abas configuradas no DE/PARA existe neste arquivo.",
     );
   }
 
@@ -135,11 +152,14 @@ function analisar(msg: Extract<ParaWorker, { acao: "analisar" }>) {
       raw: false,
     }) as unknown[][];
     const cabecalho = (m[0] ?? []).map((v) => String(v ?? "").trim());
-    const compilado = compilarMapa(msg.tipo, msg.cfg.mapa, cabecalho);
+    const compilado = compilarMapa(msg.tipo, msg.cfg.mapa, cabecalho, {
+      abasModo: msg.cfg.abasModo,
+      opcionais: msg.cfg.opcionais ?? [],
+    });
     faltando.push(...compilado.faltando);
     origensAusentes.push(...compilado.origensAusentes);
 
-    abas.push({ ano, compilado, linhas: m.slice(1).filter((r) => !linhaVazia(r)) });
+    abas.push({ ano, nome, compilado, linhas: m.slice(1).filter((r) => !linhaVazia(r)) });
     // A aba já virou linhas: solta a planilha crua dela antes de ler a
     // próxima, senão as duas representações convivem na memória.
     delete wb.Sheets[nome];
@@ -150,20 +170,38 @@ function analisar(msg: Extract<ParaWorker, { acao: "analisar" }>) {
 
   avisar({ tipo: "status", texto: "Verificando os dados…" });
   const unicos = (xs: string[]) => Array.from(new Set(xs));
+  // Quando o ano vem de coluna, quais anos o arquivo cobre so se sabe depois de
+  // ler as linhas — e e essa lista que a importacao usa para aposentar os lotes
+  // certos. Coletada de carona na verificacao, que ja percorre tudo.
+  const anosVistos = new Set<number>();
   const relatorio = analisarQualidade(
     msg.tipo,
     abas.map((a) => ({
-      ano: a.ano,
+      // O relatorio usa isto so para localizar a linha ("2024 - linha 57").
+      ano: a.ano ?? 0,
       // Gerador: traduz sob demanda, sem materializar o arquivo convertido.
       registros: (function* () {
-        for (const l of a.linhas) yield traduzir(a, l);
+        for (const l of a.linhas) {
+          const reg = traduzir(a, l);
+          if (typeof reg.ano === "number" && Number.isInteger(reg.ano)) anosVistos.add(reg.ano);
+          yield reg;
+        }
       })(),
     })),
     { faltando: unicos(faltando), origensAusentes: unicos(origensAusentes) },
   );
 
+  const anos = Array.from(anosVistos).sort((a, b) => a - b);
+  if (anos.length === 0 && !relatorio.temBloqueio) {
+    throw new Error(
+      modoAtual === "ano_na_coluna"
+        ? "Nenhuma linha trouxe ano valido na coluna mapeada. Confira o DE/PARA."
+        : "Nao foi possivel determinar o ano das abas.",
+    );
+  }
+
   avisar({ tipo: "progresso", pct: 100 });
-  avisar({ tipo: "analise", relatorio, totalLinhas, anos: abas.map((a) => a.ano) });
+  avisar({ tipo: "analise", relatorio, totalLinhas, anos });
 }
 
 async function enviar(msg: Extract<ParaWorker, { acao: "enviar" }>) {
@@ -189,7 +227,7 @@ async function enviar(msg: Extract<ParaWorker, { acao: "enviar" }>) {
   };
 
   for (const aba of abas) {
-    avisar({ tipo: "status", texto: `Enviando ${aba.ano}…` });
+    avisar({ tipo: "status", texto: `Enviando ${aba.ano ?? aba.nome}…` });
     for (const l of aba.linhas) {
       if (cancelado) throw new Error("Importação cancelada.");
       buffer.push(traduzir(aba, l));

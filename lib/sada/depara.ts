@@ -36,10 +36,19 @@ export type RegraMapa =
 /** campo de destino -> regra. Campo ausente do mapa entra como null. */
 export type Mapa = Record<string, RegraMapa>;
 
-export type AbasModo = "ano_no_nome" | "abas_escolhidas";
+/**
+ * De onde sai o ano de cada linha:
+ *   ano_no_nome     — o nome da aba é o ano (2015, 2016…), formato histórico
+ *   abas_escolhidas — o usuário escolhe as abas e diz o ano de cada uma
+ *   ano_na_coluna   — o ano sai de uma COLUNA, linha a linha (campo `ano` do
+ *                     mapa). É o caso de quem manda tudo numa aba só, ou cujas
+ *                     abas separam outra coisa (mês, tributo, unidade).
+ */
+export type AbasModo = "ano_no_nome" | "abas_escolhidas" | "ano_na_coluna";
 
 export interface AbaEscolhida {
   nome: string;
+  /** Em `ano_na_coluna` não é usado (o ano vem da linha); fica 0. */
   ano: number;
 }
 
@@ -50,6 +59,8 @@ export interface DeParaSalvo {
   abas: AbaEscolhida[] | null;
   mapa: Mapa;
   observacao?: string | null;
+  /** Campos obrigatórios dispensados NESTE mapa. Ver `camposDoTipo`. */
+  campos_opcionais?: string[];
 }
 
 export function ehConstante(r: RegraMapa): r is { constante: string | number | null } {
@@ -151,6 +162,18 @@ const VALORES_RECEBIMENTO: CampoDestino[] = [
   { campo: "ano_arrec", rotulo: "Ano da arrecadação", tipo: "int", sinonimos: ["anoarrec", "anoarrecadacao", "anopagto", "anopagamento", "exercicioarrec"] },
 ];
 
+/**
+ * Ano da linha. Só existe no modo `ano_na_coluna`: nos outros o ano vem da
+ * aba, e um mapeamento aqui seria sobrescrito sem aviso.
+ */
+export const CAMPO_ANO: CampoDestino = {
+  campo: "ano",
+  rotulo: "Ano / exercício da linha",
+  tipo: "int",
+  obrigatorio: true,
+  sinonimos: ["ano", "exercicio", "anoexercicio", "competencia", "anoreferencia", "anocompetencia"],
+};
+
 export const CAMPOS_DESTINO: Record<TipoSada, CampoDestino[]> = {
   divida_ativa: [
     ...IDENTIFICACAO,
@@ -180,6 +203,37 @@ export const CAMPOS_DESTINO: Record<TipoSada, CampoDestino[]> = {
     ...VALORES_RECEBIMENTO,
   ],
 };
+
+/**
+ * Campos de destino que valem para um mapa.
+ *
+ * `opcionais` são campos obrigatórios DISPENSADOS naquele mapa (coluna
+ * sada_depara.campos_opcionais): há ente cujo sistema não exporta a coluna, e
+ * barrar por isso deixava o cliente sem importação nenhuma. A dispensa nunca é
+ * global — é sempre de um mapa.
+ */
+export function camposDoTipo(
+  tipo: TipoSada,
+  abasModo: AbasModo = "ano_no_nome",
+  opcionais: string[] = [],
+): CampoDestino[] {
+  const base = abasModo === "ano_na_coluna"
+    ? [CAMPO_ANO, ...CAMPOS_DESTINO[tipo]]
+    : CAMPOS_DESTINO[tipo];
+  if (opcionais.length === 0) return base;
+  const dispensados = new Set(opcionais);
+  return base.map((c) =>
+    c.obrigatorio && dispensados.has(c.campo)
+      ? { ...c, obrigatorio: false, recomendado: true }
+      : c,
+  );
+}
+
+/** Campos que o tipo exige e que NÃO podem ser dispensados. O ano é um deles
+ *  quando vem de coluna: sem ele a linha não tem como ser gravada. */
+export function podeDispensar(campo: string): boolean {
+  return campo !== "ano";
+}
 
 // =====================================================================
 // Conversões
@@ -386,9 +440,10 @@ export function compilarMapa(
   tipo: TipoSada,
   mapa: Mapa,
   cabecalho: unknown[],
+  opts: { abasModo?: AbasModo; opcionais?: string[] } = {},
 ): MapaCompilado {
   const idx = indexarCabecalho(cabecalho);
-  const campos = CAMPOS_DESTINO[tipo];
+  const campos = camposDoTipo(tipo, opts.abasModo ?? "ano_no_nome", opts.opcionais ?? []);
   const porNome = new Map(campos.map((c) => [c.campo, c]));
 
   type Passo = { campo: string; ler: (l: unknown[]) => unknown };
@@ -521,8 +576,12 @@ const LIMIAR = 0.72;
  *
  * É um chute assistido: a tela existe para o usuário revisar antes de salvar.
  */
-export function sugerirMapa(tipo: TipoSada, cabecalho: unknown[]): Mapa {
-  const campos = CAMPOS_DESTINO[tipo];
+export function sugerirMapa(
+  tipo: TipoSada,
+  cabecalho: unknown[],
+  abasModo: AbasModo = "ano_no_nome",
+): Mapa {
+  const campos = camposDoTipo(tipo, abasModo);
   const colunas = cabecalho.map((c, i) => ({ i, bruto: String(c ?? "").trim(), norm: normalizar(c) }))
     .filter((c) => c.norm !== "");
   const usadas = new Set<number>();
@@ -596,8 +655,12 @@ export interface ValidacaoMapa {
   avisos: string[];
 }
 
-export function validarMapa(tipo: TipoSada, mapa: Mapa): ValidacaoMapa {
-  const campos = CAMPOS_DESTINO[tipo];
+export function validarMapa(
+  tipo: TipoSada,
+  mapa: Mapa,
+  opts: { abasModo?: AbasModo; opcionais?: string[] } = {},
+): ValidacaoMapa {
+  const campos = camposDoTipo(tipo, opts.abasModo ?? "ano_no_nome", opts.opcionais ?? []);
   const porNome = new Map(campos.map((c) => [c.campo, c]));
   const erros: string[] = [];
   const avisos: string[] = [];

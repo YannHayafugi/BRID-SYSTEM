@@ -8,13 +8,26 @@
  * em lotes e a contagem de linhas.
  *
  * Rodar:  npx tsx scripts/sada-worker-teste.ts "DÍVIDA ATIVA.xlsx" divida_ativa
+ *
+ * Terceiro argumento opcional: `ano_na_coluna` exercita o modo em que o ano
+ * NÃO vem da aba e sim de uma coluna, linha a linha. Aqui a coluna usada é a
+ * de ano de vencimento — serve para provar que o ano deixa de ser imposto
+ * pela aba e passa a variar dentro dela.
  */
 import * as fs from "node:fs";
 import type { DoWorker, ParaWorker } from "../app/sada/atualizacao/importador.worker";
 import type { TipoSada } from "../lib/sada/import";
+import { MAPA_PADRAO, type AbasModo, type Mapa } from "../lib/sada/depara";
 
 const arquivo = process.argv[2] ?? "DÍVIDA ATIVA.xlsx";
 const tipo = (process.argv[3] ?? "divida_ativa") as TipoSada;
+const abasModo = (process.argv[4] ?? "ano_no_nome") as AbasModo;
+
+/** No modo de coluna o mapa precisa dizer de onde sai o `ano`. */
+const mapa: Mapa =
+  abasModo === "ano_na_coluna"
+    ? { ...MAPA_PADRAO[tipo], ano: { origem: tipo === "lancamentos" ? 7 : 8 } }
+    : {};
 const LOTE = 1000;
 
 const recebidas: DoWorker[] = [];
@@ -64,12 +77,13 @@ async function main() {
       arquivo: ab,
       tipo,
       cnpj: "12345678000190",
-      cfg: { mapa: {}, abasModo: "ano_no_nome", abas: null, pares: [] },
+      cfg: { mapa, abasModo, abas: null, opcionais: [], pares: [] },
     },
   });
   const analise = await esperar("analise");
   if (analise.tipo !== "analise") throw new Error(`erro na análise: ${JSON.stringify(analise)}`);
   console.log(
+    `modo ${abasModo} ·`,
     `analisar: ${((Date.now() - t) / 1000).toFixed(1)}s ·`,
     `${analise.totalLinhas.toLocaleString("pt-BR")} linhas ·`,
     `anos ${analise.anos[0]}–${analise.anos[analise.anos.length - 1]} ·`,
