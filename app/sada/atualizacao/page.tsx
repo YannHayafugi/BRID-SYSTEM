@@ -20,6 +20,27 @@ import type { DoWorker, ParaWorker } from "./importador.worker";
 /** Linhas por requisição. O corpo precisa caber no limite do servidor. */
 const LOTE = 1000;
 
+/**
+ * Acima disto o arquivo NÃO passa pelo navegador.
+ *
+ * Medido nesta máquina: a aba recusa alocar 2 GB de uma vez (RangeError) e a
+ * leitura consome de 35 a 50 vezes o tamanho do arquivo, contra um teto de
+ * ~4 GB por aba. 80 MB deixa folga confortável dentro disso; acima, o arquivo
+ * é enviado ao servidor, que lê em streaming.
+ */
+const LIMITE_NAVEGADOR = 80 * 1024 * 1024;
+
+/** Acompanhamento de uma importação feita pelo servidor. */
+interface JobServidor {
+  id: number;
+  status: "recebendo" | "lendo" | "gravando" | "concluido" | "erro" | "cancelado";
+  linhas_lidas: number;
+  linhas_gravadas: number;
+  anos: number[] | null;
+  mensagem: string | null;
+  erro: string | null;
+}
+
 interface ConfigDePara {
   mapa: Mapa;
   abasModo: AbasModo;
@@ -46,6 +67,8 @@ export default function AtualizacaoDivida() {
   // o comportamento de quando só podia existir um mapa por ente+tipo.
   const [mapaNome, setMapaNome] = useState("");
   const [mapasDisponiveis, setMapasDisponiveis] = useState<string[]>([]);
+  /** Importação em curso no servidor (arquivo grande). */
+  const [job, setJob] = useState<JobServidor | null>(null);
 
   const worker = useRef<Worker | null>(null);
   /** Resolve ou rejeita a mensagem que está em curso no worker. */
@@ -152,10 +175,17 @@ export default function AtualizacaoDivida() {
     if (!cnpj.trim()) { setErro("Informe o CNPJ do ente."); return; }
     if (!arquivo) { setErro("Selecione a planilha (.xlsx)."); return; }
 
-    setRodando(true); setProgresso(0); setStatus("Preparando…");
+    setRodando(true); setProgresso(0); setStatus("Preparando…"); setJob(null);
     let importacaoId: number | null = null;
 
     try {
+      // Arquivo grande não passa pelo navegador: sobe para o servidor, que lê
+      // em streaming. A verificação de qualidade continua existindo — só que
+      // roda lá, com o mesmo código.
+      if (arquivo.size > LIMITE_NAVEGADOR) {
+        await enviarAoServidor();
+        return;
+      }
       // Só dígitos: a mesma chave usada pelo DE/PARA e gravada nas tabelas.
       const cnpjLimpo = somenteDigitos(cnpj);
 
@@ -249,8 +279,84 @@ export default function AtualizacaoDivida() {
   /** Interrompe o envio. O worker para no lote seguinte e o catch acima
    *  cancela a importação, para não deixar meia planilha no banco. */
   function cancelar() {
+    if (job) {
+      void fetch(`/api/sada/importar/arquivo?id=${job.id}`, { method: "DELETE" });
+      setStatus("Cancelando…");
+      return;
+    }
     worker.current?.postMessage({ acao: "cancelar" } as ParaWorker);
     setStatus("Cancelando…");
+  }
+
+  /**
+   * Caminho dos arquivos grandes: sobe o arquivo e acompanha o servidor.
+   *
+   * O upload usa XMLHttpRequest e não fetch porque só ele informa o quanto já
+   * subiu — num arquivo de vários GB, ficar sem retorno por meia hora é
+   * indistinguível de travamento.
+   */
+  async function enviarAoServidor() {
+    const cnpjLimpo = somenteDigitos(cnpj);
+    const url =
+      `/api/sada/importar/arquivo?cnpj=${encodeURIComponent(cnpjLimpo)}&tipo=${tipo}` +
+      `&arquivo=${encodeURIComponent(arquivo!.name)}` +
+      (mapaNome ? `&mapa=${encodeURIComponent(mapaNome)}` : "");
+
+    setStatus("Enviando o arquivo ao servidor…");
+    const id = await new Promise<number>((ok, falha) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setProgresso(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        let j: { id?: number; erro?: string } = {};
+        try { j = JSON.parse(xhr.responseText); } catch { /* resposta não-JSON */ }
+        if (xhr.status >= 200 && xhr.status < 300 && j.id) ok(j.id);
+        else falha(new Error(j.erro || `Falha no envio (HTTP ${xhr.status}).`));
+      };
+      xhr.onerror = () => falha(new Error("Conexão interrompida durante o envio."));
+      xhr.send(arquivo);
+    });
+
+    setProgresso(0);
+    setStatus("Arquivo recebido. O servidor está lendo…");
+    await acompanhar(id);
+  }
+
+  /** Pergunta o andamento ao servidor até terminar. */
+  async function acompanhar(id: number) {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const r = await fetch(`/api/sada/importar/arquivo?id=${id}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.erro || "Falha ao consultar o andamento.");
+
+      const atual = j.importacao as JobServidor;
+      setJob(atual);
+      setStatus(atual.mensagem || atual.status);
+      if (atual.linhas_lidas > 0) {
+        // Sem saber o total de linhas de antemão, o número lido é a única
+        // medida honesta de andamento — não há percentual a mostrar.
+        setStatus(
+          `${atual.status === "gravando" ? "Lendo e gravando" : "Lendo"}: ` +
+          `${Number(atual.linhas_lidas).toLocaleString("pt-BR")} linhas…`,
+        );
+      }
+
+      if (atual.status === "concluido") {
+        setProgresso(100);
+        const anos = atual.anos ?? [];
+        setConcluido(
+          `${Number(atual.linhas_gravadas).toLocaleString("pt-BR")} linhas atualizadas` +
+          (anos.length ? ` (${anos[0]}–${anos[anos.length - 1]})` : "") + ".",
+        );
+        return;
+      }
+      if (atual.status === "erro") throw new Error(atual.erro || "A importação falhou.");
+      if (atual.status === "cancelado") throw new Error("Importação cancelada. Nada foi publicado.");
+    }
   }
 
   return (
@@ -302,9 +408,13 @@ export default function AtualizacaoDivida() {
           <input type="file" accept=".xlsx" disabled={rodando}
             onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); resetarVerificacao(); }} />
           <small>
-            Uma aba por ano. Arquivo grande leva algum tempo para abrir (perto de um
-            minuto nos maiores) e o envio é feito em lotes — a tela continua
-            respondendo e mostra o andamento.
+            Uma aba por ano. Até 80 MB o arquivo é lido no próprio navegador;
+            acima disso ele é enviado ao servidor, que lê em streaming — é o
+            único caminho para arquivos de 1 GB ou mais.
+            {arquivo && (
+              <> Selecionado: <strong>{(arquivo.size / 1048576).toFixed(1)} MB</strong>
+              {arquivo.size > LIMITE_NAVEGADOR ? " — vai pelo servidor." : " — lido aqui."}</>
+            )}
           </small>
         </div>
 
@@ -313,7 +423,14 @@ export default function AtualizacaoDivida() {
             <div style={{ height: 10, background: "var(--track)", borderRadius: 5, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${progresso}%`, background: "var(--primaria)", transition: "width .2s" }} />
             </div>
-            <p className="detalhe" style={{ marginTop: 6 }}>{status} {progresso}%</p>
+            <p className="detalhe" style={{ marginTop: 6 }}>
+              {status} {progresso > 0 ? `${progresso}%` : ""}
+              {job && (
+                <>
+                  {" "}· acompanhamento nº {job.id} — pode fechar a aba e voltar depois.
+                </>
+              )}
+            </p>
           </div>
         )}
 

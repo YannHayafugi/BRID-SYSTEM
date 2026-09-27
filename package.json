@@ -15,28 +15,32 @@
     "sada:teste-depara": "tsx scripts/sada-depara-teste.ts",
     "sada:teste-previsao": "tsx scripts/sada-previsao-teste.ts",
     "sada:teste-tributario": "tsx scripts/sada-tributario-teste.ts",
-    "sada:teste-worker": "tsx scripts/sada-worker-teste.ts"
+    "sada:teste-worker": "tsx scripts/sada-worker-teste.ts",
+    "sada:teste-ingestao": "tsx scripts/sada-ingestao-teste.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@react-pdf/renderer": "^4.5.1",
+    "@supabase/ssr": "^0.12.1",
+    "@supabase/supabase-js": "^2.110.3",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "docx": "^9.0.2",
+    "mammoth": "^1.8.0",
     "next": "14.2.35",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.23.0",
+    "pg-copy-streams": "^7.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "docx": "^9.0.2",
-    "@supabase/supabase-js": "^2.110.3",
-    "@supabase/ssr": "^0.12.1",
-    "@anthropic-ai/sdk": "^0.111.0",
-    "pdf-parse": "^2.4.5",
-    "@react-pdf/renderer": "^4.5.1",
-    "mammoth": "^1.8.0",
-    "xlsx": "^0.18.5",
     "typescript": "^5.5.4",
-    "@types/node": "^20.14.0",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "exceljs": "^4.4.0",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "tsx": "^4.19.2"
   }
 }
