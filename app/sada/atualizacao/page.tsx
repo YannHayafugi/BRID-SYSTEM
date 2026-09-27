@@ -2,25 +2,23 @@
 
 /** SADA · Atualização da Dívida — sobe uma planilha (.xlsx) e atualiza os
  * dados de um tipo (dívida ativa, lançamentos, recebimentos, recebimentos DA).
- * O navegador lê e converte a planilha e envia ao servidor em lotes pequenos
- * (o Vercel limita o corpo da requisição), com barra de progresso. O lote novo
- * entra como vigente e o anterior é preservado como histórico. */
-import { useRef, useState } from "react";
+ *
+ * A leitura do arquivo e o envio dos lotes rodam num WEB WORKER
+ * (importador.worker.ts). Antes rodavam aqui, na thread da interface, e a aba
+ * congelava: medido com as planilhas reais, 19 s na dívida ativa e 43 s em
+ * lançamentos sem desenhar nada — nem a barra de progresso, nem o texto de
+ * status. Agora esta tela só conversa com o worker e mostra o andamento.
+ *
+ * O lote novo entra como vigente e o anterior é preservado como histórico. */
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import * as XLSX from "xlsx";
-import {
-  analisarQualidade, linhaVazia, RelatorioQualidade,
-  ROTULO_TIPO, TIPOS_SADA, TipoSada,
-} from "@/lib/sada/import";
-import {
-  AbaEscolhida, AbasModo, compilarMapa, compilarValores, Mapa,
-} from "@/lib/sada/depara";
+import { RelatorioQualidade, ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
+import { AbaEscolhida, AbasModo, Mapa } from "@/lib/sada/depara";
 import { somenteDigitos } from "@/lib/mascaras";
+import type { DoWorker, ParaWorker } from "./importador.worker";
 
+/** Linhas por requisição. O corpo precisa caber no limite do servidor. */
 const LOTE = 1000;
-
-/** Linhas cruas de uma aba, já sem o cabeçalho (que fica em `cabecalho`). */
-interface Aba { ano: number; cabecalho: string[]; linhas: unknown[][] }
 
 interface ConfigDePara {
   mapa: Mapa;
@@ -29,7 +27,7 @@ interface ConfigDePara {
   padrao: boolean;
   /** Nomes de todos os mapas do ente+tipo — alimenta o seletor. */
   nomes: string[];
-  pares: { campo: string; valor_origem: string; valor_canonico: string }[];
+  pares: { campo: "sigla" | "fase"; valor_origem: string; valor_canonico: string }[];
 }
 
 export default function AtualizacaoDivida() {
@@ -46,16 +44,53 @@ export default function AtualizacaoDivida() {
   // o comportamento de quando só podia existir um mapa por ente+tipo.
   const [mapaNome, setMapaNome] = useState("");
   const [mapasDisponiveis, setMapasDisponiveis] = useState<string[]>([]);
-  // Planilha já lida — evita reprocessar o arquivo ao confirmar os avisos.
-  // O CNPJ entra na chave porque o DE/PARA (e com ele o recorte de abas) é
-  // por ente: trocar de ente precisa reler o arquivo.
-  const cache = useRef<
-    { arquivo: File; tipo: TipoSada; cnpj: string; mapa: string; abas: Aba[] } | null
+
+  const worker = useRef<Worker | null>(null);
+  /** Resolve ou rejeita a mensagem que está em curso no worker. */
+  const emCurso = useRef<{ ok: (m: DoWorker) => void; falha: (e: Error) => void } | null>(null);
+  /** O que já está lido DENTRO do worker — evita reler o arquivo quando o
+   *  usuário confirma os avisos. */
+  const analisado = useRef<
+    { arquivo: File; tipo: TipoSada; cnpj: string; mapa: string; anos: number[] } | null
   >(null);
+
+  /** Um worker por tela. Encerrado ao sair: um worker vivo depois da
+   *  navegação continuaria segurando a planilha inteira em memória. */
+  useEffect(() => {
+    const w = new Worker(new URL("./importador.worker.ts", import.meta.url));
+    w.onmessage = (e: MessageEvent<DoWorker>) => {
+      const m = e.data;
+      if (m.tipo === "status") { setStatus(m.texto); return; }
+      if (m.tipo === "progresso") { setProgresso(m.pct); return; }
+      const pendente = emCurso.current;
+      emCurso.current = null;
+      if (!pendente) return;
+      if (m.tipo === "erro") pendente.falha(new Error(m.mensagem));
+      else pendente.ok(m);
+    };
+    w.onerror = () => {
+      const pendente = emCurso.current;
+      emCurso.current = null;
+      pendente?.falha(new Error("Falha ao processar a planilha no navegador."));
+    };
+    worker.current = w;
+    return () => { w.terminate(); worker.current = null; };
+  }, []);
+
+  /** Manda uma mensagem e espera a resposta final (análise, envio ou erro). */
+  function pedir(msg: ParaWorker, transferir?: Transferable[]): Promise<DoWorker> {
+    const w = worker.current;
+    if (!w) return Promise.reject(new Error("Processador da planilha indisponível."));
+    return new Promise<DoWorker>((ok, falha) => {
+      emCurso.current = { ok, falha };
+      w.postMessage(msg, transferir ?? []);
+    });
+  }
 
   /** Troca de arquivo/tipo invalida a verificação anterior. */
   function resetarVerificacao() {
     setRelatorio(null); setErro(""); setConcluido(null);
+    analisado.current = null;
   }
 
   /** Busca o DE/PARA do ente. Sem cadastro a API devolve o layout posicional
@@ -75,7 +110,9 @@ export default function AtualizacaoDivida() {
       abas: j.depara.abas ?? null,
       padrao: !!j.padrao,
       nomes: j.nomes ?? [],
-      pares: rv.ok ? (jv.pares ?? []) : [],
+      pares: rv.ok
+        ? (jv.pares ?? []).filter((p: { campo: string }) => p.campo === "sigla" || p.campo === "fase")
+        : [],
     };
   }
 
@@ -95,44 +132,6 @@ export default function AtualizacaoDivida() {
     }
   }
 
-  /**
-   * Lê as abas conforme o modo declarado no DE/PARA. O cabeçalho deixa de ser
-   * descartado: com layout variável, é ele que resolve nome de coluna -> índice.
-   */
-  async function lerPlanilha(f: File, t: TipoSada, cfg: ConfigDePara, cnpjLimpo: string): Promise<Aba[]> {
-    const c = cache.current;
-    if (c && c.arquivo === f && c.tipo === t && c.cnpj === cnpjLimpo && c.mapa === mapaNome) {
-      return c.abas;
-    }
-
-    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-
-    // Quais abas entram e que ano cada uma representa.
-    const escolhidas: { nome: string; ano: number }[] =
-      cfg.abasModo === "abas_escolhidas"
-        ? (cfg.abas ?? []).filter((a) => wb.SheetNames.includes(a.nome))
-        : wb.SheetNames
-            .map((nome) => ({ nome, ano: parseInt(nome, 10) }))
-            .filter((a) => Number.isFinite(a.ano));
-
-    if (escolhidas.length === 0) {
-      throw new Error(
-        cfg.abasModo === "abas_escolhidas"
-          ? "Nenhuma das abas configuradas no DE/PARA existe neste arquivo."
-          : "Nenhuma aba com nome de ano. Se este ente usa outro formato, configure em DE/PARA.",
-      );
-    }
-
-    const abas: Aba[] = escolhidas.map(({ nome, ano }) => {
-      const m = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: false }) as unknown[][];
-      const cabecalho = (m[0] ?? []).map((v) => String(v ?? "").trim());
-      return { ano, cabecalho, linhas: m.slice(1).filter((r) => !linhaVazia(r)) };
-    });
-
-    cache.current = { arquivo: f, tipo: t, cnpj: cnpjLimpo, mapa: mapaNome, abas };
-    return abas;
-  }
-
   async function post(url: string, body: unknown) {
     const r = await fetch(url, {
       method: "POST",
@@ -150,110 +149,83 @@ export default function AtualizacaoDivida() {
     if (!cnpj.trim()) { setErro("Informe o CNPJ do ente."); return; }
     if (!arquivo) { setErro("Selecione a planilha (.xlsx)."); return; }
 
-    setRodando(true); setProgresso(0); setStatus("Lendo a planilha…");
+    setRodando(true); setProgresso(0); setStatus("Preparando…");
     let importacaoId: number | null = null;
-    let total = 0;
-    let anoMin = Infinity, anoMax = -Infinity;
 
     try {
       // Só dígitos: a mesma chave usada pelo DE/PARA e gravada nas tabelas.
       const cnpjLimpo = somenteDigitos(cnpj);
 
-      setStatus("Carregando o DE/PARA do ente…");
-      const cfg = await carregarDePara(cnpjLimpo, tipo, mapaNome);
+      // Planilha já lida no worker: confirmar os avisos não reabre o arquivo
+      // — são dezenas de segundos de leitura a menos.
+      const feito = analisado.current;
+      let anos: number[];
+      if (forcar && feito && feito.arquivo === arquivo && feito.tipo === tipo
+          && feito.cnpj === cnpjLimpo && feito.mapa === mapaNome) {
+        anos = feito.anos;
+      } else {
+        setStatus("Carregando o DE/PARA do ente…");
+        const cfg = await carregarDePara(cnpjLimpo, tipo, mapaNome);
 
-      const abas = await lerPlanilha(arquivo, tipo, cfg, cnpjLimpo);
-      const totalLinhas = abas.reduce((s, a) => s + a.linhas.length, 0);
-      if (totalLinhas === 0) throw new Error("A planilha não tem linhas de dados.");
-
-      // Um compilado por aba: o cabeçalho pode variar de uma aba para outra.
-      const compilados = abas.map((a) => compilarMapa(tipo, cfg.mapa, a.cabecalho));
-      const valores = compilarValores(
-        cfg.pares.filter((p) => p.campo === "sigla" || p.campo === "fase") as
-          { campo: "sigla" | "fase"; valor_origem: string; valor_canonico: string }[],
-      );
-
-      /** Linha crua -> registro pronto para o banco, já com o DE/PARA de valores. */
-      const traduzir = (iAba: number, linha: unknown[], ano: number) => {
-        const reg = compilados[iAba].aplicar(linha);
-        if ("sigla" in reg) reg.sigla = valores.aplicar("sigla", reg.sigla);
-        if ("fase" in reg) reg.fase = valores.aplicar("fase", reg.fase);
-        reg.cnpj_orgao = cnpjLimpo;
-        reg.ano = ano;
-        return reg;
-      };
-
-      const unicos = (xs: string[]) => Array.from(new Set(xs));
-
-      // Verificação de qualidade ANTES de abrir o lote: /api/sada/importar já
-      // marca a importação anterior como não-vigente, então uma planilha ruim
-      // derrubaria o retrato atual sem ter nada correto para pôr no lugar.
-      setStatus("Traduzindo e verificando os dados…");
-      const rel = analisarQualidade(
-        tipo,
-        abas.map((a, i) => ({
-          ano: a.ano,
-          // gerador: traduz sob demanda, sem materializar o arquivo convertido
-          registros: (function* () {
-            for (const l of a.linhas) yield traduzir(i, l, a.ano);
-          })(),
-        })),
-        {
-          faltando: unicos(compilados.flatMap((c) => c.faltando)),
-          origensAusentes: unicos(compilados.flatMap((c) => c.origensAusentes)),
-        },
-      );
-      setRelatorio(rel);
-
-      if (rel.temBloqueio) {
-        throw new Error(
-          "A planilha tem dados incorretos ou vazios que impedem a importação. " +
-          "Corrija na origem e envie novamente — nada foi alterado.",
+        const buffer = await arquivo.arrayBuffer();
+        // O ArrayBuffer é TRANSFERIDO, não copiado: são dezenas de MB.
+        const resp = await pedir(
+          {
+            acao: "analisar",
+            arquivo: buffer,
+            tipo,
+            cnpj: cnpjLimpo,
+            cfg: { mapa: cfg.mapa, abasModo: cfg.abasModo, abas: cfg.abas, pares: cfg.pares },
+          },
+          [buffer],
         );
-      }
-      // Só avisos: espera a confirmação explícita do usuário (o finally libera o botão).
-      if (rel.achados.length > 0 && !forcar) return;
+        if (resp.tipo !== "analise") throw new Error("Resposta inesperada do processador.");
 
+        setRelatorio(resp.relatorio);
+        analisado.current = { arquivo, tipo, cnpj: cnpjLimpo, mapa: mapaNome, anos: resp.anos };
+        anos = resp.anos;
+
+        if (resp.relatorio.temBloqueio) {
+          throw new Error(
+            "A planilha tem dados incorretos ou vazios que impedem a importação. " +
+            "Corrija na origem e envie novamente — nada foi alterado.",
+          );
+        }
+        // Só avisos: espera a confirmação explícita do usuário.
+        if (resp.relatorio.achados.length > 0 && !forcar) return;
+      }
+
+      // O lote só é aberto agora, depois da verificação: /api/sada/importar já
+      // marca a importação anterior como não-vigente, então uma planilha ruim
+      // derrubaria o retrato atual sem nada correto para pôr no lugar.
       setStatus("Iniciando importação…");
+      setProgresso(0);
       const ini = await post("/api/sada/importar", {
         cnpj: cnpjLimpo, tipo, arquivoNome: arquivo.name,
         // Sem isto o servidor aposenta todos os lotes do ente+tipo, e uma
         // importação de um ano só faz os demais sumirem dos dashboards.
-        anos: abas.map((a) => a.ano),
+        anos,
       });
       importacaoId = ini.importacaoId;
 
-      let enviadas = 0;
-      let buffer: Record<string, unknown>[] = [];
-
-      const flush = async () => {
-        if (!buffer.length) return;
-        await post("/api/sada/importar/lote", { importacaoId, tipo, linhas: buffer });
-        enviadas += buffer.length;
-        buffer = [];
-        setProgresso(Math.round((enviadas / totalLinhas) * 100));
-      };
-
-      for (let i = 0; i < abas.length; i++) {
-        const { ano, linhas } = abas[i];
-        anoMin = Math.min(anoMin, ano); anoMax = Math.max(anoMax, ano);
-        setStatus(`Enviando ${ano}…`);
-        for (const r of linhas) {
-          buffer.push(traduzir(i, r, ano));
-          total++;
-          if (buffer.length >= LOTE) await flush();
-        }
-      }
-      await flush();
+      const fim = await pedir({ acao: "enviar", importacaoId: importacaoId as number, lote: LOTE });
+      if (fim.tipo !== "enviado") throw new Error("Resposta inesperada do processador.");
 
       setStatus("Finalizando…");
       await post("/api/sada/importar/finalizar", {
-        importacaoId, total, anoInicio: anoMin, anoFim: anoMax,
+        importacaoId,
+        total: fim.total,
+        anoInicio: Math.min(...anos),
+        anoFim: Math.max(...anos),
       });
 
       setProgresso(100);
       setRelatorio(null);
-      setConcluido(`${total.toLocaleString("pt-BR")} linhas atualizadas (${anoMin}–${anoMax}).`);
+      analisado.current = null;
+      setConcluido(
+        `${fim.total.toLocaleString("pt-BR")} linhas atualizadas ` +
+        `(${Math.min(...anos)}–${Math.max(...anos)}).`,
+      );
     } catch (e) {
       setErro((e as Error).message);
       if (importacaoId) {
@@ -263,6 +235,13 @@ export default function AtualizacaoDivida() {
     } finally {
       setRodando(false); setStatus("");
     }
+  }
+
+  /** Interrompe o envio. O worker para no lote seguinte e o catch acima
+   *  cancela a importação, para não deixar meia planilha no banco. */
+  function cancelar() {
+    worker.current?.postMessage({ acao: "cancelar" } as ParaWorker);
+    setStatus("Cancelando…");
   }
 
   return (
@@ -313,7 +292,11 @@ export default function AtualizacaoDivida() {
           <label>Planilha (.xlsx)</label>
           <input type="file" accept=".xlsx" disabled={rodando}
             onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); resetarVerificacao(); }} />
-          <small>Uma aba por ano. O envio é feito em lotes — pode levar alguns minutos.</small>
+          <small>
+            Uma aba por ano. Arquivo grande leva algum tempo para abrir (perto de um
+            minuto nos maiores) e o envio é feito em lotes — a tela continua
+            respondendo e mostra o andamento.
+          </small>
         </div>
 
         {rodando && (
@@ -360,6 +343,9 @@ export default function AtualizacaoDivida() {
           <button className="btn" onClick={() => atualizar()} disabled={rodando}>
             {rodando ? "Atualizando…" : "Atualizar dívida"}
           </button>
+          {rodando && (
+            <button className="btn secondary" onClick={cancelar}>Cancelar</button>
+          )}
           {relatorio && !relatorio.temBloqueio && relatorio.achados.length > 0 && !rodando && (
             <button className="btn secondary" onClick={() => atualizar(true)}>
               Importar mesmo assim
