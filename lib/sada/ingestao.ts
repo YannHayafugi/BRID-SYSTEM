@@ -36,6 +36,7 @@ import {
 import {
   compilarMapa,
   compilarValores,
+  MAPA_PADRAO,
   type AbaEscolhida,
   type AbasModo,
   type Mapa,
@@ -396,4 +397,166 @@ export async function abrirGravador(tipo: TipoSada, importacaoId: number): Promi
       await cliente.end();
     },
   };
+}
+
+// =====================================================================
+// Importação completa — a regra de negócio de trocar o lote vigente
+//
+// Usada pela rota (servidor recebendo o upload) e pelo importador de linha
+// de comando (scripts/sada-importar.ts). Ficar nos dois lugares é o que
+// garante que a carga feita pela máquina de quem trabalha siga exatamente
+// as mesmas regras da carga feita pelo servidor.
+// =====================================================================
+
+/** DE/PARA do ente, no mesmo formato que o worker do navegador recebe. */
+export async function configDePara(
+  cnpj: string,
+  tipo: TipoSada,
+  mapaNome: string | null,
+): Promise<ConfigIngestao> {
+  const sb = getSupabaseAdmin();
+  let q = sb
+    .from("sada_depara")
+    .select("mapa, abas_modo, abas, campos_opcionais")
+    .eq("cnpj_orgao", cnpj)
+    .eq("tipo", tipo)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (mapaNome) q = q.eq("nome", mapaNome);
+
+  const { data } = await q;
+  const linha = (data ?? [])[0];
+
+  const { data: pares } = await sb
+    .from("sada_depara_valor")
+    .select("campo, valor_origem, valor_canonico")
+    .eq("cnpj_orgao", cnpj);
+
+  return {
+    // Sem cadastro vale o layout posicional histórico, como na tela.
+    mapa: (linha?.mapa as Mapa) ?? MAPA_PADRAO[tipo],
+    abasModo: (linha?.abas_modo as AbasModo) ?? "ano_no_nome",
+    abas: (linha?.abas as AbaEscolhida[] | null) ?? null,
+    opcionais: (linha?.campos_opcionais as string[] | null) ?? [],
+    pares: ((pares ?? []) as { campo: string; valor_origem: string; valor_canonico: string }[])
+      .filter((p) => p.campo === "sigla" || p.campo === "fase") as ConfigIngestao["pares"],
+  };
+}
+
+export interface ResultadoImportacao {
+  importacaoId: number | null;
+  linhas: number;
+  anos: number[];
+  relatorio: RelatorioQualidade;
+  via: "copy" | "api";
+  /** Nada foi publicado: bloqueio de qualidade ou cancelamento. */
+  descartado: boolean;
+  motivo?: string;
+}
+
+/**
+ * Lê o arquivo e publica o lote.
+ *
+ * O lote nasce NÃO vigente e só passa a valer no fim. Numa carga de horas,
+ * aposentar o lote anterior logo no começo deixaria o dashboard vazio o tempo
+ * todo — o caminho do navegador pode fazer isso porque leva minutos.
+ *
+ * Planilha com problema impeditivo não substitui o retrato atual: o lote é
+ * apagado inteiro (o cascade leva as linhas junto).
+ */
+export async function importarArquivo(opcoes: {
+  caminho: string;
+  nomeArquivo: string;
+  cnpj: string;
+  tipo: TipoSada;
+  cfg: ConfigIngestao;
+  aoProgresso?: (p: ProgressoIngestao) => void | Promise<void>;
+  /** Consultado a cada bloco; true interrompe sem publicar nada. */
+  cancelado?: () => boolean | Promise<boolean>;
+  aoAbrirLote?: (importacaoId: number, via: "copy" | "api") => void | Promise<void>;
+}): Promise<ResultadoImportacao> {
+  const { caminho, nomeArquivo, cnpj, tipo, cfg } = opcoes;
+  const sb = getSupabaseAdmin();
+
+  const ins = await sb
+    .from("sada_importacoes")
+    .insert({ cnpj_orgao: cnpj, tipo, arquivo_nome: nomeArquivo, vigente: false })
+    .select("id")
+    .single();
+  if (ins.error) throw new Error(ins.error.message);
+  const importacaoId = Number(ins.data.id);
+
+  const gravador = await abrirGravador(tipo, importacaoId);
+  await opcoes.aoAbrirLote?.(importacaoId, gravador.via);
+
+  let interrompido = false;
+
+  try {
+    const { linhas, anos, relatorio } = await lerArquivo(
+      caminho,
+      nomeArquivo,
+      tipo,
+      cnpj,
+      cfg,
+      async (bloco) => {
+        if (interrompido) return;
+        if (opcoes.cancelado && (await opcoes.cancelado())) {
+          interrompido = true;
+          return;
+        }
+        await gravador.gravar(bloco);
+      },
+      opcoes.aoProgresso,
+    );
+
+    await gravador.encerrar();
+
+    if (interrompido) {
+      await sb.from("sada_importacoes").delete().eq("id", importacaoId);
+      return {
+        importacaoId: null, linhas, anos, relatorio, via: gravador.via,
+        descartado: true, motivo: "Cancelada. Nada foi publicado.",
+      };
+    }
+
+    if (relatorio.temBloqueio) {
+      await sb.from("sada_importacoes").delete().eq("id", importacaoId);
+      return {
+        importacaoId: null, linhas, anos, relatorio, via: gravador.via,
+        descartado: true,
+        motivo: "A planilha tem dados que impedem a importação. Nada foi alterado.",
+      };
+    }
+
+    const anoInicio = anos.length ? anos[0] : null;
+    const anoFim = anos.length ? anos[anos.length - 1] : null;
+
+    await sb
+      .from("sada_importacoes")
+      .update({ linhas_importadas: linhas, ano_inicio: anoInicio, ano_fim: anoFim, vigente: true })
+      .eq("id", importacaoId);
+
+    // Aposenta só os lotes que cobrem os mesmos anos — importar 2025 não pode
+    // derrubar o lote que contém 2015–2024.
+    let aposentar = sb
+      .from("sada_importacoes")
+      .update({ vigente: false })
+      .eq("cnpj_orgao", cnpj)
+      .eq("tipo", tipo)
+      .neq("id", importacaoId);
+    if (anoInicio !== null && anoFim !== null) {
+      aposentar = aposentar.or(
+        `and(ano_inicio.lte.${anoFim},ano_fim.gte.${anoInicio}),ano_inicio.is.null,ano_fim.is.null`,
+      );
+    }
+    await aposentar;
+
+    await sb.rpc("sada_refresh_mvs");
+
+    return { importacaoId, linhas, anos, relatorio, via: gravador.via, descartado: false };
+  } catch (e) {
+    await gravador.encerrar().catch(() => {});
+    await sb.from("sada_importacoes").delete().eq("id", importacaoId);
+    throw e;
+  }
 }
