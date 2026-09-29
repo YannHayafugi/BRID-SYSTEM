@@ -147,6 +147,17 @@ export async function GET(req: NextRequest) {
   if (barrado) return barrado;
 
   const sp = new URL(req.url).searchParams;
+
+  // A tela pergunta isto ao abrir: sem saber se o servidor aguenta arquivo
+  // grande, a pessoa só descobriria depois de escolher um arquivo de 2 GB e
+  // ver o envio ser recusado.
+  if (sp.get("capacidade")) {
+    return NextResponse.json({
+      suportaGrande: !serverlessDetectado(),
+      via: temCopy() ? "copy" : "api",
+    });
+  }
+
   const id = Number(sp.get("id"));
   const sb = getSupabaseAdmin();
 
