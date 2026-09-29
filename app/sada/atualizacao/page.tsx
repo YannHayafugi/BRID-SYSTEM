@@ -69,6 +69,8 @@ export default function AtualizacaoDivida() {
   const [mapasDisponiveis, setMapasDisponiveis] = useState<string[]>([]);
   /** Importação em curso no servidor (arquivo grande). */
   const [job, setJob] = useState<JobServidor | null>(null);
+  /** O que este servidor aguenta. Nulo enquanto não respondeu. */
+  const [capacidade, setCapacidade] = useState<{ suportaGrande: boolean; via: string } | null>(null);
 
   const worker = useRef<Worker | null>(null);
   /** Resolve ou rejeita a mensagem que está em curso no worker. */
@@ -100,6 +102,16 @@ export default function AtualizacaoDivida() {
     };
     worker.current = w;
     return () => { w.terminate(); worker.current = null; };
+  }, []);
+
+  // Pergunta ao servidor, ao abrir a tela, se ele aguenta arquivo grande.
+  // Sem isto a pessoa só descobriria a recusa depois de escolher um arquivo de
+  // 2 GB e ver o envio ser barrado.
+  useEffect(() => {
+    fetch("/api/sada/importar/arquivo?capacidade=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setCapacidade({ suportaGrande: !!j.suportaGrande, via: String(j.via) }))
+      .catch(() => {});
   }, []);
 
   /** Manda uma mensagem e espera a resposta final (análise, envio ou erro). */
@@ -174,6 +186,16 @@ export default function AtualizacaoDivida() {
     setErro(""); setConcluido(null);
     if (!cnpj.trim()) { setErro("Informe o CNPJ do ente."); return; }
     if (!arquivo) { setErro("Selecione a planilha (.xlsx)."); return; }
+
+    // Recusa antes de começar: subir 2 GB para receber "não suportado" no fim
+    // seria desperdiçar a espera inteira.
+    if (arquivo.size > LIMITE_NAVEGADOR && capacidade?.suportaGrande === false) {
+      setErro(
+        `Este servidor lê no máximo ${Math.round(LIMITE_NAVEGADOR / 1048576)} MB por arquivo ` +
+        "(não tem disco próprio). Peça o arquivo dividido — por ano, por exemplo — ou em CSV menor.",
+      );
+      return;
+    }
 
     setRodando(true); setProgresso(0); setStatus("Preparando…"); setJob(null);
     let importacaoId: number | null = null;
@@ -408,12 +430,24 @@ export default function AtualizacaoDivida() {
           <input type="file" accept=".xlsx" disabled={rodando}
             onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); resetarVerificacao(); }} />
           <small>
-            Uma aba por ano. Até 80 MB o arquivo é lido no próprio navegador;
-            acima disso ele é enviado ao servidor, que lê em streaming — é o
-            único caminho para arquivos de 1 GB ou mais.
+            Uma aba por ano. Até {Math.round(LIMITE_NAVEGADOR / 1048576)} MB o arquivo
+            é lido no próprio navegador.
+            {capacidade?.suportaGrande === false ? (
+              <> Acima disso <strong>este servidor não aceita</strong>: ele não tem disco
+              próprio. Peça o arquivo dividido (por ano) ou em CSV menor.</>
+            ) : (
+              <> Acima disso ele é enviado ao servidor, que lê em streaming — é o único
+              caminho para arquivos de 1 GB ou mais.
+              {capacidade?.via === "api" && (
+                <> Atenção: a gravação está pela API (sem conexão direta ao banco), o que
+                deixa a carga bem mais lenta.</>
+              )}</>
+            )}
             {arquivo && (
               <> Selecionado: <strong>{(arquivo.size / 1048576).toFixed(1)} MB</strong>
-              {arquivo.size > LIMITE_NAVEGADOR ? " — vai pelo servidor." : " — lido aqui."}</>
+              {arquivo.size > LIMITE_NAVEGADOR
+                ? (capacidade?.suportaGrande === false ? " — grande demais para este servidor." : " — vai pelo servidor.")
+                : " — lido aqui."}</>
             )}
           </small>
         </div>
