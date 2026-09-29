@@ -8,8 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { TIPOS_SADA, TipoSada } from "@/lib/sada/import";
-import { MAPA_PADRAO, type AbaEscolhida, type AbasModo, type Mapa } from "@/lib/sada/depara";
-import { abrirGravador, lerArquivo, temCopy, type ConfigIngestao } from "@/lib/sada/ingestao";
+import { configDePara, importarArquivo, temCopy } from "@/lib/sada/ingestao";
 import { somenteDigitos } from "@/lib/mascaras";
 
 export const runtime = "nodejs";
@@ -209,38 +208,13 @@ export async function DELETE(req: NextRequest) {
 
 // =====================================================================
 // Processamento
+//
+// A regra de negócio (abrir o lote não vigente, ler, descartar quando há
+// bloqueio, trocar a vigência no fim) mora em lib/sada/ingestao.ts, e é a
+// mesma que o importador de linha de comando usa. Aqui fica só o que é da
+// rota: refletir o andamento na tabela de acompanhamento e obedecer ao
+// pedido de cancelamento.
 // =====================================================================
-
-/** DE/PARA do ente, no mesmo formato que o worker do navegador recebe. */
-async function configDePara(cnpj: string, tipo: TipoSada, mapaNome: string | null): Promise<ConfigIngestao> {
-  const sb = getSupabaseAdmin();
-  let q = sb
-    .from("sada_depara")
-    .select("mapa, abas_modo, abas, campos_opcionais")
-    .eq("cnpj_orgao", cnpj)
-    .eq("tipo", tipo)
-    .order("updated_at", { ascending: false })
-    .limit(1);
-  if (mapaNome) q = q.eq("nome", mapaNome);
-
-  const { data } = await q;
-  const linha = (data ?? [])[0];
-
-  const { data: pares } = await sb
-    .from("sada_depara_valor")
-    .select("campo, valor_origem, valor_canonico")
-    .eq("cnpj_orgao", cnpj);
-
-  return {
-    // Sem cadastro vale o layout posicional histórico, como na tela.
-    mapa: (linha?.mapa as Mapa) ?? MAPA_PADRAO[tipo],
-    abasModo: ((linha?.abas_modo as AbasModo) ?? "ano_no_nome"),
-    abas: (linha?.abas as AbaEscolhida[] | null) ?? null,
-    opcionais: (linha?.campos_opcionais as string[] | null) ?? [],
-    pares: ((pares ?? []) as { campo: string; valor_origem: string; valor_canonico: string }[])
-      .filter((p) => p.campo === "sigla" || p.campo === "fase") as ConfigIngestao["pares"],
-  };
-}
 
 async function processar(id: number) {
   const sb = getSupabaseAdmin();
@@ -252,135 +226,81 @@ async function processar(id: number) {
   const caminho = String(job.caminho);
   const arquivoNome = String(job.arquivo_nome ?? "planilha.xlsx");
 
-  let importacaoId: number | null = null;
-  let gravador: Awaited<ReturnType<typeof abrirGravador>> | null = null;
-
   try {
     const cfg = await configDePara(cnpj, tipo, (job.mapa_nome as string) ?? null);
-
-    // O lote nasce NÃO vigente e só passa a valer no fim. Numa carga de horas,
-    // aposentar o lote anterior logo no começo deixaria o dashboard vazio o
-    // tempo todo — foi assim que o caminho do navegador sempre funcionou,
-    // onde a carga dura minutos.
-    const ins = await sb
-      .from("sada_importacoes")
-      .insert({ cnpj_orgao: cnpj, tipo, arquivo_nome: arquivoNome, vigente: false })
-      .select("id")
-      .single();
-    if (ins.error) throw new Error(ins.error.message);
-    importacaoId = Number(ins.data.id);
-
-    gravador = await abrirGravador(tipo, importacaoId);
-    await sb
-      .from("sada_importacao_arquivo")
-      .update({
-        status: "gravando",
-        importacao_id: importacaoId,
-        mensagem: gravador.via === "copy"
-          ? "Lendo e gravando (COPY direto no banco)."
-          : "Lendo e gravando pela API (sem SADA_DB_URL configurada, é bem mais lento).",
-      })
-      .eq("id", id);
 
     let cancelado = false;
     let ultimoAviso = 0;
 
-    const { linhas, anos, relatorio } = await lerArquivo(
+    const r = await importarArquivo({
       caminho,
-      arquivoNome,
-      tipo,
+      nomeArquivo: arquivoNome,
       cnpj,
+      tipo,
       cfg,
-      async (bloco) => {
-        if (cancelado) return;
-        await gravador!.gravar(bloco);
+      cancelado: () => cancelado,
+      aoAbrirLote: async (importacaoId, via) => {
+        await sb
+          .from("sada_importacao_arquivo")
+          .update({
+            status: "gravando",
+            importacao_id: importacaoId,
+            mensagem: via === "copy"
+              ? "Lendo e gravando (COPY direto no banco)."
+              : "Lendo e gravando pela API (sem SADA_DB_URL configurada, é bem mais lento).",
+          })
+          .eq("id", id);
       },
-      async (p) => {
-        // Uma atualização de status por bloco seria uma escrita a cada 20 mil
-        // linhas; com arquivos de dezenas de milhões isso vira ruído. Uma vez
-        // a cada 3 segundos basta para a tela parecer viva.
+      aoProgresso: async (p) => {
+        // Uma escrita a cada bloco seria uma por 20 mil linhas; com arquivos de
+        // dezenas de milhões isso vira ruído. A cada 3 segundos basta para a
+        // tela parecer viva — e é aqui que o cancelamento é percebido.
         const agora = Date.now();
         if (agora - ultimoAviso < 3000) return;
         ultimoAviso = agora;
         const { data } = await sb
           .from("sada_importacao_arquivo")
-          .update({ linhas_lidas: p.linhasLidas, linhas_gravadas: p.linhasGravadas, updated_at: new Date().toISOString() })
+          .update({
+            linhas_lidas: p.linhasLidas,
+            linhas_gravadas: p.linhasGravadas,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", id)
           .select("status")
           .maybeSingle();
         if (data?.status === "cancelado") cancelado = true;
       },
-    );
+    });
 
-    await gravador.encerrar();
-    gravador = null;
-
-    if (cancelado) {
-      await sb.from("sada_importacoes").delete().eq("id", importacaoId);
+    if (r.descartado) {
       await sb
         .from("sada_importacao_arquivo")
-        .update({ mensagem: "Cancelada. Nada foi publicado." })
+        .update({
+          status: cancelado ? "cancelado" : "erro",
+          relatorio: r.relatorio,
+          linhas_lidas: r.linhas,
+          ...(cancelado ? { mensagem: r.motivo } : { erro: r.motivo }),
+        })
         .eq("id", id);
       await unlink(caminho).catch(() => {});
       return;
     }
 
-    if (relatorio.temBloqueio) {
-      // Mesmo critério da tela: planilha com problema impeditivo não substitui
-      // o retrato atual. As linhas já gravadas vão embora com o lote.
-      await sb.from("sada_importacoes").delete().eq("id", importacaoId);
-      await sb
-        .from("sada_importacao_arquivo")
-        .update({
-          status: "erro",
-          relatorio,
-          linhas_lidas: linhas,
-          erro: "A planilha tem dados que impedem a importação. Nada foi alterado.",
-        })
-        .eq("id", id);
-      return;
-    }
-
-    // Fecha o lote e só agora troca a vigência.
-    const anoInicio = anos.length ? anos[0] : null;
-    const anoFim = anos.length ? anos[anos.length - 1] : null;
-    await sb
-      .from("sada_importacoes")
-      .update({ linhas_importadas: linhas, ano_inicio: anoInicio, ano_fim: anoFim, vigente: true })
-      .eq("id", importacaoId);
-
-    let aposentar = sb
-      .from("sada_importacoes")
-      .update({ vigente: false })
-      .eq("cnpj_orgao", cnpj)
-      .eq("tipo", tipo)
-      .neq("id", importacaoId);
-    if (anoInicio !== null && anoFim !== null) {
-      aposentar = aposentar.or(
-        `and(ano_inicio.lte.${anoFim},ano_fim.gte.${anoInicio}),ano_inicio.is.null,ano_fim.is.null`,
-      );
-    }
-    await aposentar;
-
-    await sb.rpc("sada_refresh_mvs");
-
     await sb
       .from("sada_importacao_arquivo")
       .update({
         status: "concluido",
-        linhas_lidas: linhas,
-        linhas_gravadas: linhas,
-        anos,
-        relatorio,
-        mensagem: `${linhas.toLocaleString("pt-BR")} linhas publicadas.`,
+        linhas_lidas: r.linhas,
+        linhas_gravadas: r.linhas,
+        anos: r.anos,
+        relatorio: r.relatorio,
+        mensagem: `${r.linhas.toLocaleString("pt-BR")} linhas publicadas.`,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
 
     await unlink(caminho).catch(() => {});
   } catch (e) {
-    await gravador?.encerrar().catch(() => {});
-    if (importacaoId) await sb.from("sada_importacoes").delete().eq("id", importacaoId);
     await sb
       .from("sada_importacao_arquivo")
       .update({ status: "erro", erro: (e as Error).message })
