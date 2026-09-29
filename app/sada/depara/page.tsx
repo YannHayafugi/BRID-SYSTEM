@@ -123,14 +123,26 @@ export default function DeParaPage() {
   // -------------------------------------------------------------------
   // Carga do mapa salvo
   // -------------------------------------------------------------------
-  async function carregar() {
+  /**
+   * Carrega um mapa salvo.
+   *
+   * Recebe ente/tipo/nome por PARÂMETRO, e não só do estado: quem vem da
+   * listagem ("Abrir") acabou de mandar trocar os três, e `setState` não é
+   * imediato — ler do estado aqui buscaria o ente ANTERIOR, ou reclamaria de
+   * CNPJ vazio na primeira vez.
+   */
+  async function carregar(
+    cnpjAlvo: string = cnpj,
+    tipoAlvo: TipoSada = tipo,
+    nomeAlvo: string = nome,
+  ) {
     setErro(""); setOk(""); setAviso("");
-    const cnpjChave = somenteDigitos(cnpj);
+    const cnpjChave = somenteDigitos(cnpjAlvo);
     if (!cnpjChave) { setErro("Informe o CNPJ do ente."); return; }
     setCarregando(true);
     try {
-      const q = nome.trim() ? `&nome=${encodeURIComponent(nome.trim())}` : "";
-      const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(cnpjChave)}&tipo=${tipo}${q}`);
+      const q = nomeAlvo.trim() ? `&nome=${encodeURIComponent(nomeAlvo.trim())}` : "";
+      const r = await fetch(`/api/sada/depara?cnpj=${encodeURIComponent(cnpjChave)}&tipo=${tipoAlvo}${q}`);
       const j = await r.json();
       if (r.status === 401) { window.location.href = "/login"; return; }
       if (!r.ok) throw new Error(j.erro || "Falha ao carregar.");
@@ -392,9 +404,10 @@ export default function DeParaPage() {
     setTipo(m.tipo as TipoSada);
     setNome(m.nome);
     setAba("colunas");
+    // A planilha de referência anterior é de outro ente: manter confundiria
+    // as colunas oferecidas.
     setPlanilha(null);
-    // Espera o estado assentar antes de buscar: `carregar` lê cnpj/tipo/nome.
-    setTimeout(() => void carregar(), 0);
+    await carregar(m.cnpjOrgao, m.tipo as TipoSada, m.nome);
   }
 
   /**
@@ -463,7 +476,9 @@ export default function DeParaPage() {
               {TIPOS_SADA.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t]}</option>)}
             </select>
           </div>
-          <button className="btn" onClick={carregar} disabled={carregando || salvando}>
+          {/* Sem a seta o React passaria o evento de clique como primeiro
+              argumento, que agora é o CNPJ. */}
+          <button className="btn" onClick={() => void carregar()} disabled={carregando || salvando}>
             {carregando ? "Carregando…" : "Carregar"}
           </button>
         </div>
