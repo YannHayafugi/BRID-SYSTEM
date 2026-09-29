@@ -8,14 +8,17 @@
  * O arquivo enviado nesta tela NÃO é importado: serve só para ler o cabeçalho,
  * sugerir o mapa e mostrar o preview. A importação continua em /sada/atualizacao.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { somenteDigitos } from "@/lib/mascaras";
 import Link from "next/link";
 import * as XLSX from "xlsx";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import Modal from "@/app/components/Modal";
 import { linhaVazia, ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
 import {
-  AbaEscolhida, AbasModo, CAMPOS_DESTINO, CampoValor, chaveValor, compilarMapa,
-  ehConstante, Mapa, RegraMapa, sugerirMapa, Transform, validarMapa, valoresDistintos,
+  AbaEscolhida, AbasModo, camposDoTipo, CampoValor, chaveValor, compilarMapa,
+  ehConstante, Mapa, podeDispensar, RegraMapa, sugerirMapa, Transform, validarMapa,
+  valoresDistintos,
 } from "@/lib/sada/depara";
 
 interface Planilha {
@@ -30,6 +33,27 @@ interface Planilha {
 
 interface Par { valor_origem: string; valor_canonico: string }
 
+/** Uma linha da listagem de mapas salvos (GET ?listar=1). */
+interface MapaSalvo {
+  cnpjOrgao: string;
+  ente: string | null;
+  tipo: string;
+  nome: string;
+  abasModo: string;
+  abas: { nome: string; ano: number }[] | null;
+  camposOpcionais: string[];
+  campos: number;
+  observacao: string | null;
+  atualizadoEm: string;
+  porQuem: string | null;
+}
+
+const ROTULO_MODO: Record<string, string> = {
+  ano_no_nome: "Nome da aba é o ano",
+  abas_escolhidas: "Abas escolhidas, ano informado",
+  ano_na_coluna: "Ano vem de uma coluna",
+};
+
 const SEM_ORIGEM = "";
 const CONSTANTE = "\u0000constante";
 
@@ -43,7 +67,7 @@ const TRANSFORMS_INT: { valor: Transform | ""; rotulo: string }[] = [
 export default function DeParaPage() {
   const [cnpj, setCnpj] = useState("");
   const [tipo, setTipo] = useState<TipoSada>("divida_ativa");
-  const [aba, setAba] = useState<"colunas" | "valores">("colunas");
+  const [aba, setAba] = useState<"colunas" | "valores" | "salvos">("colunas");
 
   const [planilha, setPlanilha] = useState<Planilha | null>(null);
   const [mapa, setMapa] = useState<Mapa>({});
@@ -55,6 +79,15 @@ export default function DeParaPage() {
   // do ano). O nome identifica qual está sendo editado; vazio = o mais recente.
   const [nome, setNome] = useState("");
   const [nomesDisponiveis, setNomesDisponiveis] = useState<string[]>([]);
+  /** Campos obrigatórios dispensados NESTE mapa (sada_depara.campos_opcionais). */
+  const [camposOpcionais, setCamposOpcionais] = useState<string[]>([]);
+  /** Admin ou superadmin: só eles dispensam obrigatoriedade. */
+  const [podeDispensarAqui, setPodeDispensarAqui] = useState(false);
+
+  const [salvos, setSalvos] = useState<MapaSalvo[] | null>(null);
+  /** Caixa de confirmação depois de salvar — antes a confirmação era uma
+   *  linha de texto no meio da tela, e passava despercebida. */
+  const [salvoBox, setSalvoBox] = useState<{ titulo: string; linhas: string[] } | null>(null);
 
   const [campoValor, setCampoValor] = useState<CampoValor>("sigla");
   const [pares, setPares] = useState<Par[]>([]);
@@ -66,7 +99,26 @@ export default function DeParaPage() {
   const [ok, setOk] = useState("");
   const inputArquivo = useRef<HTMLInputElement>(null);
 
-  const campos = CAMPOS_DESTINO[tipo];
+  // Os campos dependem do modo (o `ano` só existe quando vem de coluna) e das
+  // dispensas gravadas no mapa.
+  const campos = useMemo(
+    () => camposDoTipo(tipo, abasModo, camposOpcionais),
+    [tipo, abasModo, camposOpcionais],
+  );
+
+  // Perfil do usuário: a dispensa de obrigatoriedade é de admin/superadmin.
+  useEffect(() => {
+    const sb = getSupabaseBrowserClient();
+    sb.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: p } = await sb
+        .from("gp_profiles")
+        .select("perfil, is_superadmin")
+        .eq("id", data.user.id)
+        .single();
+      setPodeDispensarAqui(!!p && (p.is_superadmin || p.perfil === "admin"));
+    });
+  }, []);
 
   // -------------------------------------------------------------------
   // Carga do mapa salvo
@@ -86,6 +138,7 @@ export default function DeParaPage() {
       setMapa(j.depara.mapa ?? {});
       setAbasModo(j.depara.abas_modo ?? "ano_no_nome");
       setAbasEscolhidas(j.depara.abas ?? []);
+      setCamposOpcionais(j.depara.campos_opcionais ?? []);
       setObservacao(j.depara.observacao ?? "");
       setEhPadrao(!!j.padrao);
       setNomesDisponiveis(j.nomes ?? []);
@@ -137,7 +190,7 @@ export default function DeParaPage() {
 
       // Só sugere quando não há mapa cadastrado — não sobrescreve trabalho salvo.
       if (ehPadrao) {
-        const sug = sugerirMapa(tipo, cabecalho);
+        const sug = sugerirMapa(tipo, cabecalho, abasModo);
         setMapa(sug);
         const naoCasou = campos.filter((c) => !sug[c.campo]).map((c) => c.rotulo);
         setAviso(
@@ -214,7 +267,10 @@ export default function DeParaPage() {
     return compilarMapa(tipo, mapa, planilha.cabecalho);
   }, [planilha, mapa, tipo]);
 
-  const validacao = useMemo(() => validarMapa(tipo, mapa), [tipo, mapa]);
+  const validacao = useMemo(
+    () => validarMapa(tipo, mapa, { abasModo, opcionais: camposOpcionais }),
+    [tipo, mapa, abasModo, camposOpcionais],
+  );
 
   const preview = useMemo(() => {
     if (!planilha || !compilado) return [];
@@ -259,7 +315,8 @@ export default function DeParaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cnpj: somenteDigitos(cnpj), tipo, nome: nome.trim(), mapa, abasModo,
-          abas: abasModo === "abas_escolhidas" ? abasEscolhidas : null,
+          // No modo de coluna a lista é opcional: vazia = todas as abas.
+          abas: abasModo === "ano_no_nome" ? null : abasEscolhidas,
           observacao: observacao.trim() || null,
         }),
       });
@@ -268,6 +325,19 @@ export default function DeParaPage() {
       setEhPadrao(false);
       setOk("DE/PARA de colunas salvo.");
       if (j.avisos?.length) setAviso(j.avisos.join(" "));
+      setSalvos(null);
+      setSalvoBox({
+        titulo: "DE/PARA de colunas salvo",
+        linhas: [
+          `Ente ${somenteDigitos(cnpj)} · ${ROTULO_TIPO[tipo]} · mapa "${nome.trim() || "Padrão"}".`,
+          `${Object.keys(mapa).length} campo(s) mapeado(s). ${ROTULO_MODO[abasModo]}.`,
+          ...(camposOpcionais.length
+            ? [`Obrigatoriedade dispensada em: ${camposOpcionais.join(", ")}.`]
+            : []),
+          ...(j.avisos?.length ? j.avisos : []),
+          "A próxima importação deste ente já usa este mapa.",
+        ],
+      });
     } catch (e) {
       setErro((e as Error).message);
     } finally {
@@ -288,10 +358,71 @@ export default function DeParaPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro || "Falha ao salvar.");
       setOk(`${j.gravados} tradução(ões) de valor gravada(s).`);
+      setSalvoBox({
+        titulo: "DE/PARA de valores salvo",
+        linhas: [
+          `${j.gravados} tradução(ões) de "${campoValor}" gravada(s) para o ente ${somenteDigitos(cnpj)}.`,
+          "Vale para todas as planilhas deste ente, em qualquer tipo.",
+        ],
+      });
     } catch (e) {
       setErro((e as Error).message);
     } finally {
       setSalvando(false);
+    }
+  }
+
+  /** Lista os mapas cadastrados (todos os entes). */
+  async function carregarSalvos() {
+    setErro("");
+    try {
+      const r = await fetch("/api/sada/depara?listar=1");
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.erro || "Falha ao listar os mapas.");
+      setSalvos(j.mapas ?? []);
+    } catch (e) {
+      setErro((e as Error).message);
+      setSalvos([]);
+    }
+  }
+
+  /** Abre um mapa da listagem na aba de edição. */
+  async function editarSalvo(m: MapaSalvo) {
+    setCnpj(m.cnpjOrgao);
+    setTipo(m.tipo as TipoSada);
+    setNome(m.nome);
+    setAba("colunas");
+    setPlanilha(null);
+    // Espera o estado assentar antes de buscar: `carregar` lê cnpj/tipo/nome.
+    setTimeout(() => void carregar(), 0);
+  }
+
+  /**
+   * Dispensa (ou volta a exigir) um campo obrigatório neste mapa.
+   * Grava na hora, por PATCH: é decisão de admin e não depende de salvar o
+   * mapa inteiro — que é operação de superadmin.
+   */
+  async function alternarDispensa(campo: string, dispensar: boolean) {
+    const novos = dispensar
+      ? Array.from(new Set([...camposOpcionais, campo]))
+      : camposOpcionais.filter((c) => c !== campo);
+    setErro("");
+    try {
+      const r = await fetch("/api/sada/depara", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cnpj: somenteDigitos(cnpj), tipo, nome: nome.trim(), camposOpcionais: novos,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.erro || "Falha ao alterar a obrigatoriedade.");
+      setCamposOpcionais(j.camposOpcionais ?? novos);
+      setOk(dispensar
+        ? `"${campo}" deixou de ser obrigatório neste mapa.`
+        : `"${campo}" voltou a ser obrigatório neste mapa.`);
+    } catch (e) {
+      setErro((e as Error).message);
     }
   }
 
@@ -364,19 +495,70 @@ export default function DeParaPage() {
         <button className={aba === "valores" ? "ativa" : ""} onClick={() => setAba("valores")}>
           Valores ({pares.length})
         </button>
+        <button
+          className={aba === "salvos" ? "ativa" : ""}
+          onClick={() => { setAba("salvos"); if (!salvos) void carregarSalvos(); }}
+        >
+          Mapas salvos{salvos ? ` (${salvos.length})` : ""}
+        </button>
       </div>
 
       {aba === "colunas" && (
         <>
           <section className="card" style={{ marginBottom: 16 }}>
-            <h2>Como as abas viram o ano</h2>
+            <h2>De onde sai o ano de cada linha</h2>
             <div className="field">
               <select value={abasModo} disabled={salvando}
                 onChange={(e) => setAbasModo(e.target.value as AbasModo)}>
                 <option value="ano_no_nome">O nome da aba é o ano (2015, 2016…)</option>
                 <option value="abas_escolhidas">Escolher as abas e informar o ano de cada uma</option>
+                <option value="ano_na_coluna">Uma coluna da planilha traz o ano de cada linha</option>
               </select>
+              <small>
+                {abasModo === "ano_na_coluna"
+                  ? "Para quem manda tudo numa aba só, ou cujas abas separam outra coisa (mês, tributo, unidade). Mapeie a coluna no campo “Ano / exercício da linha”, abaixo."
+                  : "O SADA guarda cada linha com um ano. Se o arquivo não for organizado por ano, use a última opção."}
+              </small>
             </div>
+
+            {abasModo === "ano_na_coluna" && (
+              <>
+                {!planilha && (
+                  <p className="detalhe">
+                    Todas as abas do arquivo entram. Envie a planilha de referência
+                    se quiser escolher apenas algumas.
+                  </p>
+                )}
+                {planilha && (
+                  <>
+                    <p className="detalhe">
+                      Marque as abas que entram. Sem nenhuma marcada, entram todas —
+                      o ano não depende da aba neste modo.
+                    </p>
+                    <table className="sada-tabela">
+                      <thead><tr><th>Aba do arquivo</th><th>Entra?</th></tr></thead>
+                      <tbody>
+                        {planilha.nomesAbas.map((nomeAba) => (
+                          <tr key={nomeAba}>
+                            <td>{nomeAba}</td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                disabled={salvando}
+                                checked={abasEscolhidas.some((a) => a.nome === nomeAba)}
+                                onChange={(e) => setAbasEscolhidas((lista) => e.target.checked
+                                  ? [...lista, { nome: nomeAba, ano: 0 }]
+                                  : lista.filter((a) => a.nome !== nomeAba))}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </>
+            )}
 
             {abasModo === "abas_escolhidas" && (
               <>
@@ -432,14 +614,34 @@ export default function DeParaPage() {
               <tbody>
                 {campos.map((def) => {
                   const regra = mapa[def.campo];
+                  const dispensados = new Set(camposOpcionais);
                   const constante = regra && ehConstante(regra);
                   return (
                     <tr key={def.campo}>
                       <td>
                         {def.rotulo}
                         {def.obrigatorio && <span className="tag bloqueio" style={{ marginLeft: 6 }}>obrigatório</span>}
-                        {def.recomendado && !regra && <span className="tag aviso" style={{ marginLeft: 6 }}>recomendado</span>}
+                        {dispensados.has(def.campo) && (
+                          <span className="tag aviso" style={{ marginLeft: 6 }}>obrigatoriedade dispensada</span>
+                        )}
+                        {def.recomendado && !regra && !dispensados.has(def.campo) && (
+                          <span className="tag aviso" style={{ marginLeft: 6 }}>recomendado</span>
+                        )}
                         <br /><small>{def.campo}</small>
+                        {/* Só admin/superadmin, só em mapa já salvo e só em
+                            campo que admite dispensa (o ano nunca admite). */}
+                        {podeDispensarAqui && podeDispensar(def.campo)
+                          && (def.obrigatorio || dispensados.has(def.campo)) && !ehPadrao && (
+                          <label className="detalhe" style={{ display: "block", marginTop: 4 }}>
+                            <input
+                              type="checkbox"
+                              checked={dispensados.has(def.campo)}
+                              disabled={salvando}
+                              onChange={(e) => void alternarDispensa(def.campo, e.target.checked)}
+                            />{" "}
+                            não exigir neste ente
+                          </label>
+                        )}
                       </td>
                       <td>
                         <select value={valorSelect(regra)} disabled={salvando}
@@ -487,7 +689,7 @@ export default function DeParaPage() {
               </button>
               {planilha && (
                 <button className="btn secondary" disabled={salvando}
-                  onClick={() => { setMapa(sugerirMapa(tipo, planilha.cabecalho)); setOk(""); }}>
+                  onClick={() => { setMapa(sugerirMapa(tipo, planilha.cabecalho, abasModo)); setOk(""); }}>
                   Detectar novamente
                 </button>
               )}
@@ -595,13 +797,96 @@ export default function DeParaPage() {
         </section>
       )}
 
-      <section className="card" style={{ marginTop: 16 }}>
-        <div className="field">
-          <label>Observação (opcional)</label>
-          <input value={observacao} onChange={(e) => setObservacao(e.target.value)}
-            placeholder="ex.: layout do sistema X, exportação de janeiro/2026" disabled={salvando} />
-        </div>
-      </section>
+      {aba === "salvos" && (
+        <section className="card">
+          <h2>Mapas cadastrados</h2>
+          <p className="detalhe">
+            Todos os DE/PARA de colunas já salvos, de todos os entes. Abrir um
+            deles carrega o mapa nas abas acima para conferir ou alterar.
+          </p>
+
+          <div className="actions" style={{ marginBottom: 8 }}>
+            <button className="btn secondary" onClick={() => void carregarSalvos()}>
+              Atualizar lista
+            </button>
+          </div>
+
+          {!salvos && <p className="vazio">Carregando…</p>}
+          {salvos && salvos.length === 0 && (
+            <p className="vazio">Nenhum mapa cadastrado ainda.</p>
+          )}
+          {salvos && salvos.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table className="sada-tabela">
+                <thead>
+                  <tr>
+                    <th>Ente</th><th>Tipo</th><th>Mapa</th><th>Ano</th>
+                    <th>Campos</th><th>Atualizado</th><th>Por</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salvos.map((m) => (
+                    <tr key={`${m.cnpjOrgao}-${m.tipo}-${m.nome}`}>
+                      <td>
+                        {m.ente ?? "—"}
+                        <br /><small>{m.cnpjOrgao}</small>
+                      </td>
+                      <td>{ROTULO_TIPO[m.tipo as TipoSada] ?? m.tipo}</td>
+                      <td>
+                        {m.nome}
+                        {m.observacao && <><br /><small>{m.observacao}</small></>}
+                      </td>
+                      <td>
+                        {ROTULO_MODO[m.abasModo] ?? m.abasModo}
+                        {m.abas && m.abas.length > 0 && (
+                          <><br /><small>{m.abas.length} aba(s)</small></>
+                        )}
+                      </td>
+                      <td>
+                        {m.campos}
+                        {m.camposOpcionais.length > 0 && (
+                          <>
+                            <br />
+                            <small>dispensados: {m.camposOpcionais.join(", ")}</small>
+                          </>
+                        )}
+                      </td>
+                      <td>{new Date(m.atualizadoEm).toLocaleString("pt-BR")}</td>
+                      <td>{m.porQuem ?? "—"}</td>
+                      <td>
+                        <button className="btn secondary" onClick={() => void editarSalvo(m)}>
+                          Abrir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {aba !== "salvos" && (
+        <section className="card" style={{ marginTop: 16 }}>
+          <div className="field">
+            <label>Observação (opcional)</label>
+            <input value={observacao} onChange={(e) => setObservacao(e.target.value)}
+              placeholder="ex.: layout do sistema X, exportação de janeiro/2026" disabled={salvando} />
+          </div>
+        </section>
+      )}
+
+      {salvoBox && (
+        <Modal titulo={`✅ ${salvoBox.titulo}`} onFechar={() => setSalvoBox(null)}>
+          <ul style={{ margin: "0 0 12px 18px" }}>
+            {salvoBox.linhas.map((l) => <li key={l}>{l}</li>)}
+          </ul>
+          <div className="actions">
+            <button className="btn" onClick={() => setSalvoBox(null)}>Entendi</button>
+          </div>
+        </Modal>
+      )}
     </main>
   );
 }

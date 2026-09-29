@@ -125,6 +125,22 @@ const REGRAS_COMUNS: RegraQualidade[] = [
     falha: (r) => r.sequencia === null,
   },
   {
+    // Só dispara quando o ano vem de uma COLUNA (abas_modo 'ano_na_coluna'):
+    // nos outros modos o ano vem da aba e é sempre válido. Bloqueia porque a
+    // coluna `ano` é not null no banco — a carga morreria no meio e deixaria
+    // o lote pela metade.
+    codigo: "ano_invalido",
+    rotulo: "Ano/exercício da linha vazio ou fora de 1980–2100",
+    severidade: "bloqueio",
+    // Só julga quem TEM o campo: registro sem `ano` nenhum é problema de
+    // mapeamento, e já sai como "campo obrigatório sem origem". Sem esta
+    // guarda a regra reprovaria qualquer chamador que monte o registro de
+    // outro jeito — foi o que aconteceu com os testes do módulo.
+    falha: (r) =>
+      "ano" in r &&
+      !(typeof r.ano === "number" && Number.isInteger(r.ano) && r.ano >= 1980 && r.ano <= 2100),
+  },
+  {
     codigo: "sigla_vazia",
     rotulo: "Sigla do tributo vazia",
     severidade: "bloqueio",

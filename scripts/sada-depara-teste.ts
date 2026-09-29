@@ -2,6 +2,7 @@
 import { analisarQualidade, mapearLinha, TIPOS_SADA, TipoSada } from "../lib/sada/import";
 import {
   compilarMapa, MAPA_PADRAO, sugerirMapa, compilarValores, parseData, numero,
+  camposDoTipo, podeDispensar, validarMapa,
 } from "../lib/sada/depara";
 
 let falhas = 0;
@@ -154,6 +155,60 @@ const relGerador = analisarQualidade("divida_ativa", [{
   registros: (function* () { for (const r of regs(7, { sequencia: null })) yield r; })(),
 }]);
 ok("gerador contabiliza as 7 linhas", relGerador.totalLinhas === 7, String(relGerador.totalLinhas));
+
+// ---------------------------------------------------------------------
+// Ano vindo de coluna e dispensa de obrigatoriedade
+// ---------------------------------------------------------------------
+console.log("\nAno na coluna e campos dispensados");
+
+const semAno = camposDoTipo("divida_ativa", "ano_no_nome").map((c) => c.campo);
+const comAno = camposDoTipo("divida_ativa", "ano_na_coluna").map((c) => c.campo);
+ok("campo ano so existe no modo de coluna",
+  !semAno.includes("ano") && comAno.includes("ano"));
+
+ok("ano nao pode ser dispensado", !podeDispensar("ano") && podeDispensar("sigla"));
+
+// Sem a coluna de sigla, o mapa e invalido...
+const mapaSemSigla = { ...MAPA_PADRAO.divida_ativa } as Record<string, unknown>;
+delete mapaSemSigla.sigla;
+const semDispensa = validarMapa("divida_ativa", mapaSemSigla as never);
+ok("sem sigla o mapa e recusado", !semDispensa.ok, semDispensa.erros.join(" "));
+
+// ...mas passa a valer quando a obrigatoriedade daquele campo e dispensada.
+const comDispensa = validarMapa("divida_ativa", mapaSemSigla as never, { opcionais: ["sigla"] });
+ok("com dispensa o mesmo mapa e aceito", comDispensa.ok, comDispensa.erros.join(" "));
+ok("dispensa vira aviso, nao silencio",
+  comDispensa.avisos.some((a) => a.toLowerCase().includes("sigla")),
+  comDispensa.avisos.join(" "));
+
+// No modo de coluna o ano e obrigatorio: mapa sem ele nao passa.
+const semColunaDeAno = validarMapa("divida_ativa", MAPA_PADRAO.divida_ativa, {
+  abasModo: "ano_na_coluna",
+});
+ok("modo de coluna exige o campo ano", !semColunaDeAno.ok, semColunaDeAno.erros.join(" "));
+
+const comColunaDeAno = validarMapa(
+  "divida_ativa",
+  { ...MAPA_PADRAO.divida_ativa, ano: { origem: 7 } },
+  { abasModo: "ano_na_coluna" },
+);
+ok("com a coluna mapeada o mapa passa", comColunaDeAno.ok, comColunaDeAno.erros.join(" "));
+
+// Linha sem ano valido bloqueia a importacao — a coluna ano e not null no banco.
+const relAnoRuim = analisarQualidade("divida_ativa", [{
+  ano: 0,
+  registros: [{ ...(regs(1)[0] as Record<string, unknown>), ano: null }],
+}]);
+ok("ano invalido bloqueia",
+  relAnoRuim.temBloqueio && relAnoRuim.achados.some((a) => a.codigo === "ano_invalido"),
+  JSON.stringify(relAnoRuim.achados.map((a) => a.codigo)));
+
+const relAnoBom = analisarQualidade("divida_ativa", [{
+  ano: 2024,
+  registros: regs(2),
+}]);
+ok("ano valido nao gera achado de ano",
+  !relAnoBom.achados.some((a) => a.codigo === "ano_invalido"));
 
 // ---------------------------------------------------------------------
 console.log(falhas === 0 ? "\nTUDO OK" : `\n${falhas} FALHA(S)`);
