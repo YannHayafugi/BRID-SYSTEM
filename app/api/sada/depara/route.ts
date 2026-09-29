@@ -86,8 +86,12 @@ async function listarMapas() {
       abas: (d.abas as AbaEscolhida[] | null) ?? null,
       camposOpcionais: (d.campos_opcionais as string[] | null) ?? [],
       // Quantos campos de destino o mapa preenche — dá uma ideia do tamanho
-      // sem trazer o mapa inteiro para a listagem.
+      // sem precisar abrir.
       campos: Object.keys((d.mapa as Mapa) ?? {}).length,
+      // O mapa inteiro vai junto: a tela mostra campo por campo ali mesmo,
+      // sem uma segunda ida ao servidor. São poucos mapas e cada um tem
+      // algumas dezenas de campos — cabe na listagem.
+      mapa: (d.mapa as Mapa) ?? {},
       observacao: (d.observacao as string) ?? null,
       atualizadoEm: String(d.updated_at),
       porQuem: porPerfil.get(String(d.criado_por)) ?? null,
@@ -170,6 +174,8 @@ export async function PUT(req: NextRequest) {
     cnpj?: string;
     tipo?: string;
     nome?: string;
+    /** Nome que o mapa tinha antes, quando a edição renomeou. */
+    nomeAnterior?: string | null;
     mapa?: Mapa;
     abasModo?: string;
     abas?: AbaEscolhida[] | null;
@@ -179,6 +185,7 @@ export async function PUT(req: NextRequest) {
   const cnpj = somenteDigitos(body?.cnpj ?? "");
   const tipo = body?.tipo ?? "";
   const nome = (body?.nome ?? "").trim() || NOME_PADRAO;
+  const nomeAnterior = (body?.nomeAnterior ?? "").trim();
   const mapa = body?.mapa;
   const abasModo = (body?.abasModo ?? "ano_no_nome") as AbasModo;
 
@@ -194,13 +201,15 @@ export async function PUT(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
   // A dispensa de obrigatoriedade é mexida só pelo PATCH: aqui ela é lida para
-  // não ser perdida ao salvar o mapa, e para a validação respeitá-la.
+  // não ser perdida ao salvar o mapa, e para a validação respeitá-la. Numa
+  // renomeação ela vem da linha ANTIGA — a nova ainda não existe.
+  const chaveLeitura = nomeAnterior || nome;
   const { data: atual } = await sb
     .from("sada_depara")
     .select("campos_opcionais")
     .eq("cnpj_orgao", cnpj)
     .eq("tipo", tipo)
-    .eq("nome", nome)
+    .eq("nome", chaveLeitura)
     .maybeSingle();
   const opcionais = (atual?.campos_opcionais as string[] | null) ?? [];
 
@@ -243,6 +252,9 @@ export async function PUT(req: NextRequest) {
       abas_modo: abasModo,
       abas,
       mapa,
+      // Explícito porque a renomeação cria linha nova: sem isso a dispensa
+      // ficaria na linha antiga, que é apagada logo abaixo.
+      campos_opcionais: opcionais,
       observacao: body?.observacao ?? null,
       criado_por: profile!.id,
       updated_at: new Date().toISOString(),
@@ -251,7 +263,27 @@ export async function PUT(req: NextRequest) {
   );
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, avisos: v.avisos, camposOpcionais: opcionais });
+  // Renomear é gravar com o nome novo e apagar o antigo — a chave do mapa é
+  // (ente, tipo, nome), então não há UPDATE de nome sem virar outro registro.
+  // Só depois do upsert dar certo: se falhasse antes, o mapa desapareceria.
+  let renomeado = false;
+  if (nomeAnterior && nomeAnterior !== nome) {
+    const del = await sb
+      .from("sada_depara")
+      .delete()
+      .eq("cnpj_orgao", cnpj)
+      .eq("tipo", tipo)
+      .eq("nome", nomeAnterior)
+      .select("nome");
+    renomeado = !del.error && (del.data ?? []).length > 0;
+  }
+
+  return NextResponse.json({
+    ok: true,
+    avisos: v.avisos,
+    camposOpcionais: opcionais,
+    renomeadoDe: renomeado ? nomeAnterior : null,
+  });
 }
 
 /**
@@ -329,4 +361,53 @@ export async function PATCH(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, camposOpcionais: data.campos_opcionais ?? [] });
+}
+
+/**
+ * DELETE /api/sada/depara?cnpj=...&tipo=...&nome=... — apaga um mapa.
+ *
+ * Só superadmin, pelo mesmo motivo do PUT: sem mapa cadastrado o importador
+ * volta ao layout posicional histórico (MAPA_PADRAO) e passa a traduzir a
+ * planilha por posição — sem erro de banco, sem erro na tela. A resposta diz
+ * quantos mapas sobraram para o ente+tipo justamente para a tela poder avisar
+ * quando esse for o caso.
+ *
+ * As importações já feitas não são afetadas: o mapa é usado na leitura do
+ * arquivo, e os dados já estão gravados nas tabelas sada_*.
+ */
+export async function DELETE(req: NextRequest) {
+  const profile = await getProfileAtual();
+  const barrado = semAcesso(profile);
+  if (barrado) return barrado;
+  if (!profile!.is_superadmin) {
+    return NextResponse.json({ erro: "Só superadmin pode excluir o DE/PARA." }, { status: 403 });
+  }
+
+  const sp = new URL(req.url).searchParams;
+  const cnpj = somenteDigitos(sp.get("cnpj") ?? "");
+  const tipo = sp.get("tipo") ?? "";
+  const nome = (sp.get("nome") ?? "").trim() || NOME_PADRAO;
+  if (!cnpj || !TIPOS_SADA.includes(tipo as TipoSada)) {
+    return NextResponse.json({ erro: "Informe cnpj e um tipo válido." }, { status: 400 });
+  }
+
+  const sb = getSupabaseAdmin();
+  const { data, error } = await sb
+    .from("sada_depara")
+    .delete()
+    .eq("cnpj_orgao", cnpj)
+    .eq("tipo", tipo)
+    .eq("nome", nome)
+    .select("nome")
+    .maybeSingle();
+  if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ erro: "Mapa não encontrado." }, { status: 404 });
+
+  const { count } = await sb
+    .from("sada_depara")
+    .select("nome", { count: "exact", head: true })
+    .eq("cnpj_orgao", cnpj)
+    .eq("tipo", tipo);
+
+  return NextResponse.json({ ok: true, restantes: count ?? 0 });
 }

@@ -589,6 +589,34 @@ textarea {
   border-bottom-color: var(--primaria);
 }
 
+/* Botões dentro de célula de tabela: o .btn padrão (10px 18px) empurra a linha
+   e, com quatro ações por mapa, estoura a largura. */
+.btn.mini {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Ação destrutiva. Vermelho de contorno, não preenchido: exclusão de mapa não
+   pode competir visualmente com o botão de salvar. */
+.btn.perigo {
+  background: var(--bg-card);
+  color: #b23c3c;
+  border: 1px solid #b23c3c;
+}
+.btn.perigo:hover:not(:disabled) {
+  background: #b23c3c;
+  color: #fff;
+}
+
+.depara-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .sada-tabela .tag {
   display: inline-block;
   padding: 1px 7px;
