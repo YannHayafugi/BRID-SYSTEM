@@ -39,6 +39,52 @@ primeira linha. E mesmo que abrisse, precisaria de dezenas de GB de memória.
 Se a planilha tiver problema impeditivo, o lote é apagado inteiro e o retrato
 anterior continua valendo — o mesmo critério do caminho do navegador.
 
+## Sem servidor com disco: importar pela sua máquina
+
+Enquanto não houver VPS, o caminho pelo navegador e o pelo servidor estão os
+dois fora de alcance para arquivos grandes. Mas o arquivo já está na máquina de
+quem trabalha — e ela fala com o banco. É para isso que existe
+`scripts/sada-importar.ts`.
+
+Ele usa **o mesmo código do servidor**: mesma tradução pelo DE/PARA, mesma
+verificação de qualidade, mesma regra de só trocar o lote vigente no fim. Muda
+apenas quem lê o arquivo.
+
+**Antes da primeira vez**, no `.env.local` do projeto (o mesmo que o site usa),
+acrescente a conexão do banco — é ela que habilita o COPY, que é o caminho
+rápido:
+
+```
+SADA_DB_URL=postgresql://postgres:SUA_SENHA@db.SEU_PROJETO.supabase.co:5432/postgres
+```
+
+A string está em Supabase > Project Settings > Database > Connection string
+(modo *Session*). Sem ela o script funciona igual, mas grava pela API do
+Supabase e demora bem mais.
+
+**Conferir antes de gravar** (lê o arquivo inteiro e relata, sem tocar no banco):
+
+```powershell
+npm run sada:importar -- --arquivo "C:\dados\DIVIDA 2026.xlsx" --cnpj 46578393000163 --tipo divida_ativa --conferir
+```
+
+**Importar de verdade:**
+
+```powershell
+npm run sada:importar -- --arquivo "C:\dados\DIVIDA 2026.xlsx" --cnpj 46578393000163 --tipo divida_ativa
+```
+
+Tipos aceitos: `divida_ativa`, `lancamentos`, `recebimentos`, `recebimentos_da`.
+Opções: `--mapa <nome>` escolhe qual DE/PARA usar, `--padrao` ignora o cadastro
+e usa o layout posicional histórico.
+
+O script mostra o andamento em linhas por segundo e, no fim, o relatório de
+qualidade. Se houver problema impeditivo, nada é publicado — o lote é apagado e
+o retrato anterior continua valendo, igual à tela.
+
+Depois da carga o dashboard já reflete o lote novo: as views materializadas são
+atualizadas no fim, como na importação pelo site.
+
 ## O que precisa estar configurado no servidor
 
 **Não funciona em plataforma serverless** (Vercel e afins): o processo morre ao

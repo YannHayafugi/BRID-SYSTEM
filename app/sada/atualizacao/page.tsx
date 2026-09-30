@@ -12,6 +12,7 @@
  * O lote novo entra como vigente e o anterior é preservado como histórico. */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ComoUsar, Dica } from "@/app/components/Ajuda";
 import { RelatorioQualidade, ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
 import { AbaEscolhida, AbasModo, Mapa } from "@/lib/sada/depara";
 import { somenteDigitos } from "@/lib/mascaras";
@@ -394,9 +395,85 @@ export default function AtualizacaoDivida() {
         <Link href="/sada" className="landing-cta secundario">← Dashboard</Link>
       </header>
 
+      <div style={{ maxWidth: 560 }}>
+        <ComoUsar chave="atualizacao" titulo="Como subir a planilha — passo a passo">
+          <ol>
+            <li>
+              <strong>Escolha o tipo.</strong> Cada tipo tem colunas próprias e é
+              guardado separado: subir lançamentos no lugar de dívida ativa não
+              mistura os dados, mas deixa o tipo certo desatualizado.
+            </li>
+            <li>
+              <strong>Informe o CNPJ do ente.</strong> É a chave que liga a planilha
+              ao DE/PARA. Pontuação é ignorada.
+            </li>
+            <li>
+              <strong>Confira o DE/PARA.</strong> É ele que diz de qual coluna da
+              planilha sai cada campo. Se o ente ainda não tiver mapa cadastrado, o
+              sistema lê <strong>por posição</strong> (1ª coluna, 2ª coluna…) — o que
+              só funciona se o arquivo vier exatamente no layout histórico. Cadastre
+              antes em <Link href="/sada/depara">DE/PARA</Link>.
+            </li>
+            <li>
+              <strong>Selecione o arquivo</strong> e clique em <strong>Atualizar
+              dívida</strong>.
+            </li>
+            <li>
+              <strong>Leia o resultado da conferência.</strong> A planilha é lida e
+              verificada <em>antes</em> de qualquer gravação: nada entra no banco
+              enquanto isso. Item <span className="tag bloqueio">impeditivo</span>{" "}
+              barra a importação — corrija na origem e envie de novo. Item{" "}
+              <span className="tag aviso">aviso</span> deixa você decidir, em
+              &ldquo;Importar mesmo assim&rdquo;, e fica registrado na tela de Qualidade.
+            </li>
+          </ol>
+
+          <p>
+            <strong>Como o arquivo precisa chegar:</strong> a primeira linha de cada
+            aba é o cabeçalho, com o nome das colunas. O ano de cada linha vem de onde
+            o DE/PARA mandar: do nome da aba (<code>2023</code>, <code>2024</code>…),
+            das abas que você escolheu, ou de uma coluna com o ano. Linhas totalmente
+            vazias são descartadas; valores como <code>1.234,56</code> e{" "}
+            <code>1234.56</code> são entendidos dos dois jeitos.
+          </p>
+          <p>
+            <strong>O que acontece com o que já estava lá:</strong> o lote novo passa a
+            valer e o anterior vira histórico — mas só são aposentados os lotes que
+            cobrem <em>os mesmos anos</em>. Importar 2026 não derruba o lote de
+            2015–2025. Se a importação falhar ou for cancelada no meio, nada é
+            publicado e o retrato anterior continua valendo.
+          </p>
+        </ComoUsar>
+      </div>
+
       <section className="card" style={{ maxWidth: 560 }}>
         <div className="field">
-          <label>Tipo de planilha</label>
+          <label>
+            Tipo de planilha
+            <Dica
+              titulo="Qual tipo escolher"
+              texto={
+                <>
+                  <strong style={{ display: "block", color: "inherit", marginTop: 6 }}>
+                    Dívida ativa
+                  </strong>
+                  os títulos inscritos em dívida, com principal, atualização, juros,
+                  multa e total.
+                  <br /><strong style={{ display: "block", color: "inherit", marginTop: 6 }}>
+                    Lançamentos
+                  </strong>
+                  o que foi lançado no exercício (mês do lançamento, exercício, valor).
+                  <br /><strong style={{ display: "block", color: "inherit", marginTop: 6 }}>
+                    Recebimentos / Recebimentos DA
+                  </strong>
+                  os pagamentos — o segundo é o que foi pago de dívida ativa. Ambos
+                  trazem os valores do DAM (VLAM, VLJM, VLMM, desconto, total).
+                  <br />
+                  Cada tipo tem o seu próprio DE/PARA e o seu próprio lote vigente.
+                </>
+              }
+            />
+          </label>
           <select value={tipo} disabled={rodando}
             onChange={(e) => {
               const t = e.target.value as TipoSada;
@@ -407,7 +484,20 @@ export default function AtualizacaoDivida() {
         </div>
 
         <div className="field">
-          <label>CNPJ do ente</label>
+          <label>
+            CNPJ do ente
+            <Dica
+              titulo="Precisa ser o mesmo do DE/PARA"
+              texto={
+                <>
+                  O ente é identificado só pelos 14 dígitos — pontuação é ignorada.
+                  Se o CNPJ digitado aqui não for o mesmo cadastrado no DE/PARA, o
+                  sistema não acha o mapa e volta a ler a planilha por posição, sem
+                  reclamar de nada: os dados entram nas colunas erradas.
+                </>
+              }
+            />
+          </label>
           <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="Somente números"
             onBlur={() => void carregarMapas(tipo)} disabled={rodando} />
           <small>A pontuação é ignorada — o ente é identificado só pelos dígitos.</small>
@@ -415,7 +505,20 @@ export default function AtualizacaoDivida() {
 
         {mapasDisponiveis.length > 1 && (
           <div className="field">
-            <label>DE/PARA a usar</label>
+            <label>
+              DE/PARA a usar
+              <Dica
+                titulo="Quando existe mais de um mapa"
+                texto={
+                  <>
+                    Aparece porque este ente tem mais de um DE/PARA para este tipo —
+                    normalmente quando trocou de sistema e os arquivos antigos e novos
+                    têm cabeçalhos diferentes. Escolha o que corresponde ao arquivo que
+                    está subindo; &ldquo;Mais recente&rdquo; usa o último salvo.
+                  </>
+                }
+              />
+            </label>
             <select value={mapaNome} disabled={rodando}
               onChange={(e) => { setMapaNome(e.target.value); resetarVerificacao(); }}>
               <option value="">Mais recente</option>
@@ -426,7 +529,28 @@ export default function AtualizacaoDivida() {
         )}
 
         <div className="field">
-          <label>Planilha (.xlsx)</label>
+          <label>
+            Planilha (.xlsx)
+            <Dica
+              titulo="O que o arquivo precisa ter"
+              texto={
+                <>
+                  Primeira linha de cada aba = cabeçalho com o nome das colunas. O ano
+                  de cada linha vem de onde o DE/PARA disser: nome da aba, abas
+                  escolhidas ou uma coluna de ano.
+                  <br /><br />
+                  Até {Math.round(LIMITE_NAVEGADOR / 1048576)} MB o arquivo é lido aqui
+                  no navegador. Acima disso ele sobe para o servidor, que lê em
+                  streaming — e nesse caso você pode fechar a aba: o trabalho continua
+                  lá e o andamento fica guardado pelo número da importação.
+                  <br /><br />
+                  Arquivo de vários GB: peça <strong>CSV</strong> ao ente. Num .xlsx os
+                  textos ficam numa tabela que precisa caber inteira na memória; o CSV
+                  é lido linha a linha e é bem mais rápido.
+                </>
+              }
+            />
+          </label>
           <input type="file" accept=".xlsx" disabled={rodando}
             onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); resetarVerificacao(); }} />
           <small>

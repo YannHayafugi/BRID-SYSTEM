@@ -589,6 +589,124 @@ textarea {
   border-bottom-color: var(--primaria);
 }
 
+/* Botões dentro de célula de tabela: o .btn padrão (10px 18px) empurra a linha
+   e, com quatro ações por mapa, estoura a largura. */
+.btn.mini {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Ação destrutiva. Vermelho de contorno, não preenchido: exclusão de mapa não
+   pode competir visualmente com o botão de salvar. */
+.btn.perigo {
+  background: var(--bg-card);
+  color: #b23c3c;
+  border: 1px solid #b23c3c;
+}
+.btn.perigo:hover:not(:disabled) {
+  background: #b23c3c;
+  color: #fff;
+}
+
+.depara-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ---------------------------------------------------------------------
+   Ajuda de tela (app/components/Ajuda.tsx)
+
+   A caixa fica discreta: quem já sabe o caminho não pode ser obrigado a
+   desviar dela toda vez — daí o cabeçalho clicável e a memória de fechada.
+   --------------------------------------------------------------------- */
+.ajuda {
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--primaria);
+  border-radius: 8px;
+  background: var(--bg-suave);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.ajuda-cabeca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--texto);
+  font-size: 0.9rem;
+  text-align: left;
+}
+.ajuda-seta { margin-left: auto; opacity: 0.7; }
+.ajuda-corpo {
+  padding: 0 14px 14px 14px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--texto);
+}
+.ajuda-corpo ol, .ajuda-corpo ul { margin: 0 0 10px 20px; }
+.ajuda-corpo li { margin-bottom: 5px; }
+.ajuda-corpo p { margin: 0 0 10px; }
+.ajuda-corpo p:last-child, .ajuda-corpo ul:last-child, .ajuda-corpo ol:last-child {
+  margin-bottom: 0;
+}
+.ajuda-corpo code {
+  background: var(--bg-card);
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 0.82em;
+}
+
+.dica-wrap { position: relative; display: inline-block; }
+.dica {
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--cinza);
+  background: none;
+  color: var(--cinza);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 5px;
+}
+.dica:hover, .dica:focus-visible, .dica.fixa {
+  border-color: var(--primaria);
+  color: var(--primaria);
+}
+.dica-bolha {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: min(320px, 78vw);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: var(--bg-card);
+  color: var(--texto);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
+  text-align: left;
+  cursor: auto;
+}
+.dica-bolha strong { display: block; margin-bottom: 4px; color: var(--primaria); }
+
 .sada-tabela .tag {
   display: inline-block;
   padding: 1px 7px;
