@@ -14,6 +14,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import Modal from "@/app/components/Modal";
+import { ComoUsar, Dica } from "@/app/components/Ajuda";
 import { linhaVazia, ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
 import {
   AbaEscolhida, AbasModo, camposDoTipo, CampoValor, chaveValor, compilarMapa,
@@ -608,12 +609,41 @@ export default function DeParaPage() {
       <section className="card" style={{ marginBottom: 16 }}>
         <div className="depara-filtros">
           <div className="field">
-            <label>CNPJ do ente</label>
+            <label>
+              CNPJ do ente
+              <Dica
+                titulo="É a chave do cadastro"
+                texto={
+                  <>
+                    Só os 14 dígitos contam — a pontuação é descartada, então{" "}
+                    <code>12.345.678/0001-90</code> e <code>12345678000190</code> são o
+                    mesmo ente. Use exatamente o CNPJ que será informado na importação:
+                    é por ele que a Atualização da Dívida encontra este mapa.
+                  </>
+                }
+              />
+            </label>
             <input value={cnpj} onChange={(e) => { setCnpj(e.target.value); setOk(""); }}
               placeholder="Somente números" disabled={carregando || salvando} />
           </div>
           <div className="field">
-            <label>Nome do mapa</label>
+            <label>
+              Nome do mapa
+              <Dica
+                titulo="Para que serve o nome"
+                texto={
+                  <>
+                    Um ente pode ter mais de um mapa para o mesmo tipo — por exemplo,
+                    quando trocou de sistema e os arquivos antigos e novos têm
+                    cabeçalhos diferentes. O nome é o que distingue os dois na hora de
+                    importar. Deixe em branco e ele vira <code>Padrão</code>.
+                    <br /><br />
+                    Mudar o nome de um mapa já salvo e clicar em Salvar{" "}
+                    <strong>renomeia</strong>: o antigo deixa de existir.
+                  </>
+                }
+              />
+            </label>
             <input value={nome} list="depara-nomes" disabled={carregando || salvando}
               onChange={(e) => { setNome(e.target.value); setOk(""); }}
               placeholder="Padrão" />
@@ -636,7 +666,22 @@ export default function DeParaPage() {
         </div>
 
         <div className="field" style={{ marginTop: 12 }}>
-          <label>Planilha de referência (.xlsx)</label>
+          <label>
+            Planilha de referência (.xlsx)
+            <Dica
+              titulo="Este arquivo não é importado"
+              texto={
+                <>
+                  Serve só para ler o cabeçalho (a primeira linha de cada aba), sugerir
+                  o mapa, listar as abas e mostrar o preview. Nenhuma linha dele entra
+                  no banco — a importação é feita em Atualização da Dívida.
+                  <br /><br />
+                  Por isso pode ser um recorte pequeno do arquivo real, desde que
+                  tenha <strong>as mesmas colunas</strong> e os mesmos nomes de aba.
+                </>
+              }
+            />
+          </label>
           <input ref={inputArquivo} type="file" accept=".xlsx" disabled={carregando || salvando}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) lerArquivo(f); }} />
           <small>
@@ -672,8 +717,85 @@ export default function DeParaPage() {
 
       {aba === "colunas" && (
         <>
+          <ComoUsar chave="depara-colunas" titulo="Como montar o DE/PARA de colunas">
+            <p>
+              Esta aba responde a uma pergunta por campo do SADA:{" "}
+              <em>de qual coluna da planilha deste ente sai este valor?</em> Sem esse
+              cadastro a importação lê <strong>por posição</strong> (1ª coluna, 2ª
+              coluna…), que só acerta se o arquivo vier no layout histórico.
+            </p>
+            <ol>
+              <li>
+                Informe o <strong>CNPJ</strong> e o <strong>tipo</strong> e clique em{" "}
+                <strong>Carregar</strong>: traz o que já estiver salvo para este ente.
+              </li>
+              <li>
+                Envie a <strong>planilha de referência</strong>. Ela serve só para ler
+                o cabeçalho e mostrar o preview — <strong>não é importada</strong>.
+                Pode ser um recorte com poucas linhas.
+              </li>
+              <li>
+                O sistema tenta reconhecer as colunas pelo nome e preenche o que
+                conseguir. <strong>Confira campo a campo</strong>: o palpite erra, e um
+                mapa errado traduz a planilha inteira sem dar erro nenhum.
+              </li>
+              <li>
+                Diga <strong>de onde vem o ano</strong> de cada linha (quadro abaixo).
+              </li>
+              <li>
+                Olhe o <strong>preview</strong> no fim da página — são as primeiras
+                linhas já traduzidas. É aí que o erro aparece.
+              </li>
+              <li>Clique em <strong>Salvar DE/PARA de colunas</strong>.</li>
+            </ol>
+            <p>
+              <strong>Regras que valem a pena saber:</strong> campo marcado{" "}
+              <span className="tag bloqueio">obrigatório</span> impede salvar enquanto
+              ficar sem origem (admin pode dispensar em &ldquo;não exigir neste
+              ente&rdquo;, quando o sistema do ente realmente não exporta aquela
+              coluna). Campo não mapeado entra vazio. <strong>Valor fixo</strong> serve
+              para o que não vem na planilha mas é sempre o mesmo. Quando mês e ano
+              estão numa <em>única</em> coluna de data, aponte os dois campos para ela
+              e escolha a conversão &ldquo;mês extraído de uma data&rdquo; e
+              &ldquo;ano extraído de uma data&rdquo;.
+            </p>
+            <p>
+              Sem a planilha em mãos o mapa continua editável: escolha{" "}
+              <strong>digitar o nome da coluna…</strong> para incluir ou trocar um
+              campo, e <strong>excluir campo</strong> para tirá-lo.
+            </p>
+          </ComoUsar>
+
           <section className="card" style={{ marginBottom: 16 }}>
-            <h2>De onde sai o ano de cada linha</h2>
+            <h2>
+              De onde sai o ano de cada linha
+              <Dica
+                titulo="Os três modos"
+                texto={
+                  <>
+                    Toda linha do SADA é guardada com um ano. Escolha como ele chega:
+                    <br /><br />
+                    <strong style={{ display: "block", color: "inherit" }}>
+                      Nome da aba é o ano
+                    </strong>
+                    o arquivo tem abas <code>2023</code>, <code>2024</code>… É o formato
+                    histórico.
+                    <br /><br />
+                    <strong style={{ display: "block", color: "inherit" }}>
+                      Abas escolhidas
+                    </strong>
+                    as abas têm outros nomes e você informa o ano de cada uma.
+                    <br /><br />
+                    <strong style={{ display: "block", color: "inherit" }}>
+                      Ano vem de uma coluna
+                    </strong>
+                    tudo numa aba só, ou abas que separam outra coisa (mês, tributo,
+                    unidade). Aparece o campo &ldquo;Ano / exercício da linha&rdquo; para
+                    mapear — e linha sem ano válido impede a importação.
+                  </>
+                }
+              />
+            </h2>
             <div className="field">
               <select value={abasModo} disabled={salvando}
                 onChange={(e) => setAbasModo(e.target.value as AbasModo)}>
@@ -931,6 +1053,34 @@ export default function DeParaPage() {
       )}
 
       {aba === "valores" && (
+        <>
+        <ComoUsar chave="depara-valores" titulo="Como usar o DE/PARA de valores">
+          <p>
+            Aqui não se traduz coluna, e sim <strong>o conteúdo</strong> de duas delas:
+            a sigla do tributo e a fase. É o que resolve o mesmo tributo aparecer como{" "}
+            <code>IPTU</code>, <code>I.P.T.U.</code> e <code>01</code> em arquivos
+            diferentes do mesmo ente.
+          </p>
+          <ol>
+            <li>Carregue o ente na aba Colunas e envie a planilha de referência.</li>
+            <li>
+              Volte aqui, escolha o campo (sigla ou fase) e clique em{" "}
+              <strong>Buscar valores na planilha</strong>: lista o que o ente realmente
+              usa, sem você adivinhar.
+            </li>
+            <li>
+              Preencha o <strong>valor canônico</strong> — o nome que o SADA deve usar.
+              Deixe vazio o que já estiver certo: valor sem tradução passa direto.
+            </li>
+            <li>Salve.</li>
+          </ol>
+          <p>
+            <strong>Vale para o ente inteiro</strong>, não por tipo de planilha: a sigla
+            precisa casar entre dívida ativa, lançamentos e recebimentos, senão o mesmo
+            tributo é contado duas vezes nos rankings. Maiúsculas, acentos e espaços
+            extras são ignorados na comparação.
+          </p>
+        </ComoUsar>
         <section className="card">
           <h2>DE/PARA de valores</h2>
           <p className="detalhe">
@@ -997,9 +1147,46 @@ export default function DeParaPage() {
             </button>
           </div>
         </section>
+        </>
       )}
 
       {aba === "salvos" && (
+        <>
+        <ComoUsar chave="depara-salvos" titulo="Como usar os mapas salvos">
+          <p>
+            É a lista de todos os DE/PARA de colunas já cadastrados, de todos os entes.
+            Serve para conferir o que está valendo antes de uma importação e para
+            manter o cadastro.
+          </p>
+          <ul>
+            <li>
+              <strong>Ver campos</strong> — abre o mapa inteiro na própria linha, campo
+              por campo, sem trocar o que você está editando.
+            </li>
+            <li>
+              <strong>Abrir para editar</strong> — carrega nas abas acima. Lá dá para
+              incluir, trocar ou excluir campo.
+            </li>
+            <li>
+              <strong>Renomear</strong> — abra, mude o &ldquo;Nome do mapa&rdquo; e
+              salve: o mapa antigo deixa de existir, não fica um duplicado.
+            </li>
+            <li>
+              <strong>Duplicar</strong> — cria outro mapa a partir deste. É o caminho
+              para um ente novo que usa o mesmo sistema de um já cadastrado: duplique,
+              troque o CNPJ e salve.
+            </li>
+            <li>
+              <strong>Excluir</strong> — apaga o cadastro. Os dados já importados não
+              mudam, mas se for o último mapa daquele ente para aquele tipo, a próxima
+              importação volta a ler a planilha por posição.
+            </li>
+          </ul>
+          <p>
+            Alterar e excluir são de superadmin; a dispensa de obrigatoriedade de um
+            campo é de admin ou superadmin. Conferir é de quem usa o SADA.
+          </p>
+        </ComoUsar>
         <section className="card">
           <h2>Mapas cadastrados</h2>
           <p className="detalhe">
@@ -1144,6 +1331,7 @@ export default function DeParaPage() {
             </div>
           )}
         </section>
+        </>
       )}
 
       {aba !== "salvos" && (
