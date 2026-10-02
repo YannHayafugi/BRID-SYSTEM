@@ -257,9 +257,9 @@ export default function AtualizacaoDivida() {
         if (resp.relatorio.achados.length > 0 && !forcar) return;
       }
 
-      // O lote só é aberto agora, depois da verificação: /api/sada/importar já
-      // marca a importação anterior como não-vigente, então uma planilha ruim
-      // derrubaria o retrato atual sem nada correto para pôr no lugar.
+      // O lote só é aberto depois da verificação — e nasce não vigente. O
+      // retrato anterior continua valendo durante toda a carga e só é
+      // aposentado em /finalizar, com as linhas todas no lugar.
       setStatus("Iniciando importação…");
       setProgresso(0);
       const ini = await post("/api/sada/importar", {
