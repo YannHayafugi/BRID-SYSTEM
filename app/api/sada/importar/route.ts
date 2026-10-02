@@ -6,14 +6,19 @@ import { somenteDigitos } from "@/lib/mascaras";
 
 export const runtime = "nodejs";
 
-/** Início da importação: cria o lote vigente e aposenta os anteriores do mesmo
- * ente+tipo QUE COBREM OS MESMOS ANOS (retrato + histórico).
+/**
+ * Início da importação: abre o lote. Ele nasce NÃO VIGENTE.
  *
- * Antes a invalidação era por ente+tipo, sem olhar o ano — o que contrariava o
- * documentado no schema e, numa importação parcial (o modo "abas escolhidas"
- * permite mandar só 2025), aposentava o lote que continha 2015–2024. As linhas
- * seguiam na tabela, mas sumiam de todo dashboard: as materialized views fazem
- * `join sada_importacoes ... and i.vigente`. */
+ * A troca da vigência (e a aposentadoria dos lotes que cobrem os mesmos anos)
+ * acontece só em /finalizar, quando todas as linhas já entraram — a mesma
+ * regra que o caminho do servidor usa em lib/sada/ingestao.ts.
+ *
+ * Antes era aqui: o lote nascia vigente e os anteriores eram aposentados
+ * ANTES da primeira linha ser inserida. Duas consequências, as duas ruins:
+ * durante os minutos da carga o ente aparecia com dados parciais, e se a
+ * importação falhasse no meio o lote novo era apagado sem ninguém reativar o
+ * antigo — o ente ficava sem dashboard até alguém importar de novo.
+ */
 export async function POST(req: NextRequest) {
   const profile = await getProfileAtual();
   if (!profile) return NextResponse.json({ erro: "Sessão expirada." }, { status: 401 });
@@ -27,8 +32,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ erro: "Informe CNPJ e um tipo válido." }, { status: 400 });
   }
 
-  // Anos cobertos por esta importação. O cliente já conhece a lista antes de
-  // enviar as linhas (leu as abas). Ausente = comportamento antigo.
+  // Anos cobertos por esta importação. O cliente já os conhece antes de enviar
+  // as linhas (leu as abas), e gravá-los aqui deixa o lote identificável
+  // mesmo se a carga for interrompida — é o que permite limpar sobras depois.
   const anosValidos: number[] = Array.isArray(anos)
     ? anos.filter((a: unknown) => Number.isInteger(a)).map(Number)
     : [];
@@ -38,27 +44,17 @@ export async function POST(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const ins = await sb
     .from("sada_importacoes")
-    .insert({ cnpj_orgao: cnpj, tipo, arquivo_nome: arquivoNome ?? null, vigente: true })
+    .insert({
+      cnpj_orgao: cnpj,
+      tipo,
+      arquivo_nome: arquivoNome ?? null,
+      ano_inicio: anoMin,
+      ano_fim: anoMax,
+      vigente: false,
+    })
     .select("id")
     .single();
   if (ins.error) return NextResponse.json({ erro: ins.error.message }, { status: 500 });
-
-  let aposentar = sb
-    .from("sada_importacoes")
-    .update({ vigente: false })
-    .eq("cnpj_orgao", cnpj).eq("tipo", tipo).neq("id", ins.data.id);
-
-  if (anoMin !== null && anoMax !== null) {
-    // Só os lotes cuja faixa cruza a desta importação. Lote sem faixa gravada
-    // (importação antiga ou interrompida) entra também: sem saber o que ele
-    // cobre, mantê-lo vigente arriscaria dobrar os números no dashboard.
-    aposentar = aposentar.or(
-      `and(ano_inicio.lte.${anoMax},ano_fim.gte.${anoMin}),ano_inicio.is.null,ano_fim.is.null`,
-    );
-  }
-
-  const upd = await aposentar;
-  if (upd.error) return NextResponse.json({ erro: upd.error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true, importacaoId: ins.data.id });
 }
