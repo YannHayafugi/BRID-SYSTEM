@@ -18,8 +18,16 @@ import { AbaEscolhida, AbasModo, Mapa } from "@/lib/sada/depara";
 import { somenteDigitos } from "@/lib/mascaras";
 import type { DoWorker, ParaWorker } from "./importador.worker";
 
-/** Linhas por requisição. O corpo precisa caber no limite do servidor. */
-const LOTE = 1000;
+/**
+ * Linhas por requisição.
+ *
+ * Eram 1.000: num arquivo de 350 mil linhas, 350 requisições — e cada uma paga
+ * a ida e volta inteira, mais a checagem de sessão no servidor. 2.500 dá um
+ * corpo de ~500 KB, bem dentro do limite de 4,5 MB da plataforma e do teto de
+ * 5.000 linhas que a rota aceita, e corta o número de requisições por 2,5.
+ * O worker ainda mantém três no ar ao mesmo tempo.
+ */
+const LOTE = 2500;
 
 /**
  * Acima disto o arquivo NÃO passa pelo navegador.

@@ -39,8 +39,18 @@ export function getSupabaseRouteClient() {
   );
 }
 
-/** Retorna o profile (com perfil/permissões) do usuário autenticado na
- * requisição atual, ou null se não houver sessão. */
+/**
+ * Retorna o profile (com perfil/permissões) do usuário autenticado na
+ * requisição atual, ou null se não houver sessão.
+ *
+ * `auth.getUser()` é uma ida à rede de propósito: é o que valida o token no
+ * servidor em vez de confiar no que veio no cookie, e é também o que renova a
+ * sessão numa importação longa, que pode passar da validade do token sem
+ * nenhuma navegação de página no meio.
+ *
+ * O `select` lista as colunas em vez de `*`: são as sete que o app usa, e a
+ * linha de gp_profiles viaja inteira a cada requisição.
+ */
 export async function getProfileAtual() {
   const supabase = getSupabaseRouteClient();
   const {
@@ -48,7 +58,11 @@ export async function getProfileAtual() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase.from("gp_profiles").select("*").eq("id", user.id).single();
+  const { data: profile } = await supabase
+    .from("gp_profiles")
+    .select("id, email, nome_completo, perfil, is_superadmin, pode_ver_sada, ativo")
+    .eq("id", user.id)
+    .single();
   // Pool de auth compartilhado com outro sistema: só entra quem um admin ativou.
   if (profile && !profile.ativo) return null;
   return profile;

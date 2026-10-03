@@ -22,17 +22,18 @@ export async function middleware(request: NextRequest) {
     );
   }
 
+  const path = request.nextUrl.pathname;
+
+  // Chamadas de API não passam por aqui: o matcher já as exclui, e esta guarda
+  // existe para o caso de alguém mexer no matcher. Vem ANTES de updateSession
+  // de propósito — é justamente a ida ao Supabase que não queremos pagar duas
+  // vezes, já que cada rota confere a sessão por conta própria. Redirecionar
+  // também seria errado: um fetch receberia o HTML do login no lugar do JSON.
+  if (path.startsWith("/api/")) return NextResponse.next();
+
   const { supabaseResponse, autenticado, contaInativa } = await updateSession(request);
 
-  const path = request.nextUrl.pathname;
   const rotaPublica = ROTAS_PUBLICAS.some((r) => path === r || (r !== "/" && path.startsWith(r + "/")));
-
-  // Rotas de API tratam sua própria autorização (ou dependem do RLS do
-  // Supabase); não redirecionamos aqui para não quebrar chamadas fetch com
-  // uma resposta de redirecionamento HTML no lugar de JSON.
-  if (path.startsWith("/api/")) {
-    return supabaseResponse;
-  }
 
   // Usa "autenticado" (Supabase Auth + gp_profiles.ativo), não só a sessão do
   // Supabase — senão um usuário logado no Auth mas ainda não ativado neste
@@ -64,8 +65,18 @@ export const config = {
      * Aplica a todas as rotas, exceto arquivos estáticos e de imagem do Next.js
      * e arquivos estáticos servidos direto de /public (logo, ícones etc. —
      * precisam carregar mesmo sem sessão, ex.: na própria tela de login).
-     * As rotas de API cuidam da própria autenticação/RLS via Supabase.
+     *
+     * `api/` também fica de fora, e isso é latência, não estilo: cada rota já
+     * confere a sessão por conta própria (getProfileAtual), então passar pelo
+     * middleware antes cobrava DUAS idas extras ao Supabase por requisição —
+     * uma em auth.getUser() e outra no perfil. Numa importação, que manda
+     * centenas de lotes, isso somava centenas de idas e voltas só para
+     * repetir uma verificação que a rota ia refazer em seguida.
+     *
+     * O que se perde: a renovação do cookie de sessão deixa de acontecer em
+     * chamadas de API. Ela continua acontecendo em qualquer navegação de
+     * página, e o cliente das rotas também renova quando o token expira.
      */
-    "/((?!_next/static|_next/image|favicon.ico|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

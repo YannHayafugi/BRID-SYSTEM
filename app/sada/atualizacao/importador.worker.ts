@@ -204,37 +204,73 @@ function analisar(msg: Extract<ParaWorker, { acao: "analisar" }>) {
   avisar({ tipo: "analise", relatorio, totalLinhas, anos });
 }
 
+/**
+ * Quantos lotes ficam no ar ao mesmo tempo.
+ *
+ * O envio era estritamente sequencial: um arquivo de 350 mil linhas virava 350
+ * requisições uma depois da outra, e o tempo total era a soma de todas as idas
+ * e voltas — com a máquina e o banco ociosos entre elas. Três é o suficiente
+ * para cobrir a latência sem transformar a importação numa enxurrada sobre o
+ * banco (cada lote é um INSERT de milhares de linhas).
+ */
+const CONCORRENTES = 3;
+
 async function enviar(msg: Extract<ParaWorker, { acao: "enviar" }>) {
   const totalLinhas = abas.reduce((s, a) => s + a.linhas.length, 0);
+
+  // Os lotes são só índices: as linhas já estão em memória, e fatiá-las na
+  // hora do envio evita manter uma segunda cópia traduzida do arquivo todo.
+  const lotes: { aba: number; de: number; ate: number }[] = [];
+  abas.forEach((aba, i) => {
+    for (let ini = 0; ini < aba.linhas.length; ini += msg.lote) {
+      lotes.push({ aba: i, de: ini, ate: Math.min(ini + msg.lote, aba.linhas.length) });
+    }
+  });
+
   let enviadas = 0;
-  let buffer: Record<string, unknown>[] = [];
+  let proximo = 0;
+  /** Primeira falha vista. Faz os outros trabalhadores pararem no lote atual,
+   *  em vez de continuarem gravando num lote que já vai ser descartado. */
+  let falha: Error | null = null;
 
-  const flush = async () => {
-    if (!buffer.length) return;
-    const r = await fetch("/api/sada/importar/lote", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // O worker é da mesma origem, então o cookie de sessão vai junto —
-      // é o que faz a rota reconhecer o usuário como na tela.
-      credentials: "same-origin",
-      body: JSON.stringify({ importacaoId: msg.importacaoId, tipo: tipoAtual, linhas: buffer }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.erro || `Erro ${r.status} ao enviar o lote`);
-    enviadas += buffer.length;
-    buffer = [];
-    avisar({ tipo: "progresso", pct: Math.round((enviadas / totalLinhas) * 100) });
-  };
-
-  for (const aba of abas) {
-    avisar({ tipo: "status", texto: `Enviando ${aba.ano ?? aba.nome}…` });
-    for (const l of aba.linhas) {
+  async function trabalhador() {
+    for (;;) {
+      if (falha) return;
       if (cancelado) throw new Error("Importação cancelada.");
-      buffer.push(traduzir(aba, l));
-      if (buffer.length >= msg.lote) await flush();
+      const meu = proximo++;
+      if (meu >= lotes.length) return;
+
+      const { aba, de, ate } = lotes[meu];
+      const linhas = abas[aba].linhas.slice(de, ate).map((l) => traduzir(abas[aba], l));
+
+      const r = await fetch("/api/sada/importar/lote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // O worker é da mesma origem, então o cookie de sessão vai junto —
+        // é o que faz a rota reconhecer o usuário como na tela.
+        credentials: "same-origin",
+        body: JSON.stringify({ importacaoId: msg.importacaoId, tipo: tipoAtual, linhas }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.erro || `Erro ${r.status} ao enviar o lote`);
+
+      enviadas += linhas.length;
+      avisar({ tipo: "progresso", pct: Math.round((enviadas / totalLinhas) * 100) });
+      avisar({
+        tipo: "status",
+        texto: `Enviando: ${enviadas.toLocaleString("pt-BR")} de ${totalLinhas.toLocaleString("pt-BR")} linhas`,
+      });
     }
   }
-  await flush();
+
+  const equipe = Array.from({ length: Math.min(CONCORRENTES, lotes.length) }, () =>
+    trabalhador().catch((e: unknown) => {
+      falha = falha ?? (e as Error);
+    }),
+  );
+  await Promise.all(equipe);
+  if (falha) throw falha;
+
   avisar({ tipo: "enviado", total: enviadas });
 }
 
