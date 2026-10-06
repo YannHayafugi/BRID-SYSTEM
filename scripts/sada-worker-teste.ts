@@ -46,8 +46,18 @@ let ultimoStatus = "";
 let lotes = 0;
 let linhasEnviadas = 0;
 let maiorLote = 0;
+/** Quantos envios ficaram no ar ao mesmo tempo. É o que distingue o envio
+ *  paralelo do sequencial — sem isso o teste passava dos dois jeitos. */
+let emVoo = 0;
+let maxEmVoo = 0;
 (globalThis as unknown as { fetch: unknown }).fetch = async (_url: string, init: RequestInit) => {
   const corpo = JSON.parse(String(init.body)) as { linhas: unknown[] };
+  emVoo++;
+  maxEmVoo = Math.max(maxEmVoo, emVoo);
+  // Uma espera real: com a resposta imediata, o laço nunca chega a sobrepor
+  // requisições e a concorrência passaria despercebida.
+  await new Promise((r) => setTimeout(r, 2));
+  emVoo--;
   lotes++;
   linhasEnviadas += corpo.linhas.length;
   maiorLote = Math.max(maiorLote, corpo.linhas.length);
@@ -103,7 +113,8 @@ async function main() {
   console.log(
     `enviar: ${((Date.now() - t) / 1000).toFixed(1)}s ·`,
     `${lotes} lotes (maior: ${maiorLote}) ·`,
-    `${linhasEnviadas.toLocaleString("pt-BR")} linhas`,
+    `${linhasEnviadas.toLocaleString("pt-BR")} linhas ·`,
+    `até ${maxEmVoo} lote(s) no ar ao mesmo tempo`,
   );
 
   const problemas: string[] = [];
@@ -111,6 +122,10 @@ async function main() {
   if (linhasEnviadas !== analise.totalLinhas) problemas.push("linhas no fetch != total analisado");
   if (maiorLote > LOTE) problemas.push("lote maior que o limite");
   if (recebidas.filter((m) => m.tipo === "progresso").length < 2) problemas.push("sem progresso no envio");
+  // O ganho de latência do envio paralelo some sem ninguém notar se alguém
+  // reintroduzir um `await` por lote: o resultado continua correto, só lento.
+  if (maxEmVoo < 2) problemas.push("envio não ficou paralelo (nunca houve 2 lotes no ar)");
+  if (maxEmVoo > 3) problemas.push(`concorrência acima do limite: ${maxEmVoo}`);
 
   if (problemas.length) {
     console.error("\nFALHOU: " + problemas.join("; "));

@@ -1,28 +1,51 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Antonio, Inter, Montserrat } from "next/font/google";
+import localFont from "next/font/local";
 import BarraUsuario from "./components/BarraUsuario";
 
-// D25: tipografia da marca Grupo BRID — títulos/nav em Montserrat (bold,
-// geométrica, igual ao site institucional), corpo de texto em Inter.
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
+/**
+ * Tipografia da marca Grupo BRID — títulos/nav em Montserrat (bold,
+ * geométrica, igual ao site institucional), corpo de texto em Inter, e
+ * Antonio nos títulos da página pública (D25, D52).
+ *
+ * Os arquivos ficam no repositório, em vez de virem do `next/font/google`.
+ * Não é preferência: com o Google, **o build busca as fontes na rede**, e
+ * quando essa busca falha o deploy inteiro falha — foi o que derrubou o
+ * deploy de 03/10, com `Build failed because of webpack errors` apontando
+ * para `next/font/google/target.css ... "import":"Montserrat"`. Três
+ * famílias eram três chances de o build cair por motivo nenhum.
+ *
+ * São os mesmos arquivos que o `next/font/google` já baixava e servia junto
+ * com o site (subconjunto latino, que cobre o português), agora versionados:
+ * 110 KB no total, as três variáveis — um arquivo serve todos os pesos.
+ *
+ * `adjustFontFallback` mantém o que se ganhava antes de graça: o Next calcula
+ * as métricas da fonte e ajusta o fallback (Arial) para o texto não "pular"
+ * quando a fonte real termina de carregar.
+ */
+const montserrat = localFont({
+  src: "./fonts/montserrat-latin-var.woff2",
+  weight: "500 800",
+  style: "normal",
   variable: "--fonte-titulo",
   display: "swap",
+  adjustFontFallback: "Arial",
 });
-const inter = Inter({
-  subsets: ["latin"],
+const inter = localFont({
+  src: "./fonts/inter-latin-var.woff2",
+  weight: "100 900",
+  style: "normal",
   variable: "--fonte-corpo",
   display: "swap",
+  adjustFontFallback: "Arial",
 });
-// D52: fonte dos títulos do site institucional (grupobrid.com) — usada na
-// página inicial pública.
-const antonio = Antonio({
-  subsets: ["latin"],
-  weight: ["600", "700"],
+const antonio = localFont({
+  src: "./fonts/antonio-latin-var.woff2",
+  weight: "600 700",
+  style: "normal",
   variable: "--fonte-brid",
   display: "swap",
+  adjustFontFallback: "Arial",
 });
 
 export const metadata: Metadata = {

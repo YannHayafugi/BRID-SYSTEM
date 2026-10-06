@@ -11,16 +11,16 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { somenteDigitos } from "@/lib/mascaras";
 import Link from "next/link";
-import * as XLSX from "xlsx";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import Modal from "@/app/components/Modal";
 import { ComoUsar, Dica } from "@/app/components/Ajuda";
-import { linhaVazia, ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
+import { ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
 import {
   AbaEscolhida, AbasModo, camposDoTipo, CampoValor, chaveValor, compilarMapa,
   ehConstante, Mapa, podeDispensar, RegraMapa, sugerirMapa, Transform, validarMapa,
-  valoresDistintos,
 } from "@/lib/sada/depara";
+// Só os tipos: o `xlsx` fica no bundle do worker, não no desta tela.
+import type { DoPlanilhaWorker, ParaPlanilhaWorker } from "./planilha.worker";
 
 interface Planilha {
   nomesAbas: string[];
@@ -28,9 +28,11 @@ interface Planilha {
   abaLida: string;
   cabecalho: string[];
   amostra: unknown[][];
-  /** todas as linhas de todas as abas — usado só na aba de Valores */
-  todas: { nome: string; linhas: unknown[][] }[];
+  /** O arquivo em si. A aba de Valores relê dele quando precisa — guardar as
+   *  linhas todas em estado era o que derrubava a aba com arquivo grande. */
+  arquivo: File;
 }
+
 
 interface Par { valor_origem: string; valor_canonico: string }
 
@@ -126,6 +128,10 @@ export default function DeParaPage() {
   const [campoValor, setCampoValor] = useState<CampoValor>("sigla");
   const [pares, setPares] = useState<Par[]>([]);
 
+  const leitor = useRef<Worker | null>(null);
+  /** Resolve ou rejeita a leitura em curso no worker. */
+  const emCurso = useRef<{ ok: (m: DoPlanilhaWorker) => void; falha: (e: Error) => void } | null>(null);
+
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -139,6 +145,41 @@ export default function DeParaPage() {
     () => camposDoTipo(tipo, abasModo, camposOpcionais),
     [tipo, abasModo, camposOpcionais],
   );
+
+  // -------------------------------------------------------------------
+  // Worker que lê a planilha de referência
+  //
+  // Um por tela, encerrado ao sair: um worker vivo depois da navegação
+  // continuaria segurando a planilha em memória.
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    const w = new Worker(new URL("./planilha.worker.ts", import.meta.url));
+    w.onmessage = (e: MessageEvent<DoPlanilhaWorker>) => {
+      const pendente = emCurso.current;
+      emCurso.current = null;
+      if (!pendente) return;
+      if (e.data.tipo === "erro") pendente.falha(new Error(e.data.mensagem));
+      else pendente.ok(e.data);
+    };
+    w.onerror = () => {
+      const pendente = emCurso.current;
+      emCurso.current = null;
+      pendente?.falha(new Error("Falha ao ler a planilha no navegador."));
+    };
+    leitor.current = w;
+    return () => { w.terminate(); leitor.current = null; };
+  }, []);
+
+  /** Manda uma mensagem ao leitor e espera a resposta. O ArrayBuffer é
+   *  TRANSFERIDO, não copiado: são dezenas de MB. */
+  function pedirAoWorker(msg: ParaPlanilhaWorker): Promise<DoPlanilhaWorker> {
+    const w = leitor.current;
+    if (!w) return Promise.reject(new Error("Leitor de planilha indisponível."));
+    return new Promise<DoPlanilhaWorker>((ok, falha) => {
+      emCurso.current = { ok, falha };
+      w.postMessage(msg, [msg.arquivo]);
+    });
+  }
 
   // Perfil do usuário: a dispensa de obrigatoriedade é de admin/superadmin.
   useEffect(() => {
@@ -219,25 +260,14 @@ export default function DeParaPage() {
     setErro(""); setOk("");
     setCarregando(true);
     try {
-      const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-      const todas = wb.SheetNames.map((nome) => {
-        const m = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, raw: false });
-        return { nome, linhas: (m as unknown[][]).filter((r) => !linhaVazia(r)) };
-      }).filter((a) => a.linhas.length > 0);
+      // A leitura roda no worker: o .xlsx é descompactado inteiro antes de
+      // qualquer linha ser lida (13 s no export de 83 MB), e aqui isso seria
+      // a aba congelada, sem nem pintar o "Lendo a planilha…".
+      const resp = await pedirAoWorker({ acao: "preview", arquivo: await f.arrayBuffer() });
+      if (resp.tipo !== "preview") throw new Error("Resposta inesperada do leitor.");
 
-      if (todas.length === 0) throw new Error("A planilha não tem nenhuma aba com dados.");
-
-      const primeira = todas[0];
-      const cabecalho = (primeira.linhas[0] ?? []).map((c) => String(c ?? "").trim());
-      const amostra = primeira.linhas.slice(1, 6);
-
-      setPlanilha({
-        nomesAbas: todas.map((a) => a.nome),
-        abaLida: primeira.nome,
-        cabecalho,
-        amostra,
-        todas,
-      });
+      const { nomesAbas, abaLida, cabecalho, amostra } = resp;
+      setPlanilha({ nomesAbas, abaLida, cabecalho, amostra, arquivo: f });
 
       // Só sugere quando não há mapa cadastrado — não sobrescreve trabalho salvo.
       if (ehPadrao) {
@@ -252,12 +282,12 @@ export default function DeParaPage() {
       }
 
       // Abas cujo nome não é ano sugerem o modo "abas escolhidas".
-      const todosAno = todas.every((a) => Number.isFinite(parseInt(a.nome, 10)));
+      const todosAno = nomesAbas.every((n) => Number.isFinite(parseInt(n, 10)));
       if (!todosAno && abasModo === "ano_no_nome") {
         setAbasModo("abas_escolhidas");
-        setAbasEscolhidas(todas.map((a) => ({
-          nome: a.nome,
-          ano: Number.isFinite(parseInt(a.nome, 10)) ? parseInt(a.nome, 10) : new Date().getFullYear(),
+        setAbasEscolhidas(nomesAbas.map((n) => ({
+          nome: n,
+          ano: Number.isFinite(parseInt(n, 10)) ? parseInt(n, 10) : new Date().getFullYear(),
         })));
       }
     } catch (e) {
@@ -385,22 +415,45 @@ export default function DeParaPage() {
   // -------------------------------------------------------------------
   // Valores distintos (aba Valores)
   // -------------------------------------------------------------------
-  function carregarValoresDaPlanilha() {
+  /**
+   * Lista os valores que o ente usa, relendo o arquivo — uma amostra dele.
+   *
+   * Reler custa alguns segundos; guardar as linhas todas em estado custava a
+   * aba inteira num arquivo grande. E a amostra basta: siglas e fases são um
+   * punhado de valores distintos, que aparecem logo nas primeiras linhas.
+   */
+  async function carregarValoresDaPlanilha() {
     if (!planilha) { setErro("Envie uma planilha de referência primeiro."); return; }
-    const comp = compilarMapa(tipo, mapa, planilha.cabecalho);
-    const registros: Record<string, unknown>[] = [];
-    for (const a of planilha.todas) {
-      for (const l of a.linhas.slice(1)) registros.push(comp.aplicar(l));
+    setErro(""); setOk("");
+    setCarregando(true);
+    try {
+      const resp = await pedirAoWorker({
+        acao: "valores",
+        arquivo: await planilha.arquivo.arrayBuffer(),
+        tipo,
+        mapa,
+        cabecalho: planilha.cabecalho,
+        campo: campoValor,
+      });
+      if (resp.tipo !== "valores") throw new Error("Resposta inesperada do leitor.");
+
+      setPares((atuais) => {
+        const jaTem = new Set(atuais.map((p) => chaveValor(p.valor_origem)));
+        const novos = resp.distintos
+          .filter((v) => !jaTem.has(chaveValor(v)))
+          .map((v) => ({ valor_origem: v, valor_canonico: "" }));
+        return [...atuais, ...novos];
+      });
+      setOk(
+        `${resp.distintos.length} valor(es) distinto(s) em ${resp.lidas.toLocaleString("pt-BR")} linhas lidas — ` +
+        `amostra das primeiras ${resp.limitePorAba.toLocaleString("pt-BR")} linhas de cada aba. ` +
+        "Se o ente usar uma sigla só lá no fim do arquivo, acrescente a linha à mão.",
+      );
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setCarregando(false);
     }
-    const distintos = valoresDistintos(registros, campoValor);
-    setPares((atuais) => {
-      const jaTem = new Set(atuais.map((p) => chaveValor(p.valor_origem)));
-      const novos = distintos
-        .filter((v) => !jaTem.has(chaveValor(v)))
-        .map((v) => ({ valor_origem: v, valor_canonico: "" }));
-      return [...atuais, ...novos];
-    });
-    setOk(`${distintos.length} valor(es) distinto(s) encontrado(s) em ${registros.length.toLocaleString("pt-BR")} linhas.`);
   }
 
   // -------------------------------------------------------------------
@@ -1099,8 +1152,9 @@ export default function DeParaPage() {
                 <option value="fase">Fase / situação</option>
               </select>
             </div>
-            <button className="btn secondary" onClick={carregarValoresDaPlanilha} disabled={salvando || !planilha}>
-              Buscar valores na planilha
+            <button className="btn secondary" disabled={salvando || carregando || !planilha}
+              onClick={() => void carregarValoresDaPlanilha()}>
+              {carregando ? "Lendo a planilha…" : "Buscar valores na planilha"}
             </button>
             <button className="btn secondary" disabled={salvando}
               onClick={() => setPares((p) => [...p, { valor_origem: "", valor_canonico: "" }])}>
