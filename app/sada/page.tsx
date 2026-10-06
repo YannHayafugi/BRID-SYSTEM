@@ -59,10 +59,22 @@ export default function SadaPage() {
       .catch(() => {});
   }, []);
 
+  /**
+   * Carrega o dashboard do cliente selecionado.
+   *
+   * O `AbortController` não é zelo: trocar de cliente duas vezes seguidas
+   * deixava duas respostas em voo, e a que chegasse por último vencia. Com a
+   * faixa de qualidade demorando, a janela era grande o bastante para o
+   * dashboard acabar mostrando os números do cliente errado — sem erro
+   * nenhum na tela.
+   */
   useEffect(() => {
+    const ctrl = new AbortController();
     const q = cliente ? `?cliente=${encodeURIComponent(cliente)}` : "";
     setCarregando(true);
-    fetch(`/api/sada/dashboard${q}`)
+    setErro("");
+
+    fetch(`/api/sada/dashboard${q}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (r.status === 401) { window.location.href = "/login"; return; }
         const j = await r.json();
@@ -70,22 +82,35 @@ export default function SadaPage() {
         if (!r.ok) throw new Error(j.erro || "Falha ao carregar.");
         setD(j);
       })
-      .catch((e) => setErro(e.message))
-      .finally(() => setCarregando(false));
+      .catch((e) => { if (e.name !== "AbortError") setErro(e.message); })
+      .finally(() => { if (!ctrl.signal.aborted) setCarregando(false); });
 
     // Aviso de qualidade dos dados (não bloqueia o dashboard).
-    fetch(`/api/sada/qualidade${q ? q + "&" : "?"}modo=resumo`)
+    fetch(`/api/sada/qualidade${q ? q + "&" : "?"}modo=resumo`, { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => j && setQualidade(j.resumo))
       .catch(() => {});
+
+    return () => ctrl.abort();
   }, [cliente]);
 
-  if (carregando) return <main className="sada-wrap"><p className="vazio">Carregando análises…</p></main>;
+  // Só a PRIMEIRA carga troca a tela por um aviso. Nas seguintes o dashboard
+  // anterior continua à vista, esmaecido: apagar tudo a cada troca de filtro
+  // fazia a tela piscar e perder o contexto do que se estava comparando.
+  if (carregando && !d) {
+    return <main className="sada-wrap"><p className="vazio">Carregando análises…</p></main>;
+  }
   if (erro) return <main className="sada-wrap"><p className="erro-texto">{erro}</p></main>;
   if (!d) return null;
 
   return (
-    <main className="sada-wrap">
+    // Recarregando: o conteúdo anterior fica à vista, esmaecido, para a troca
+    // de cliente não parecer que a tela quebrou. Continua clicável de
+    // propósito — trocar de cliente de novo no meio é legítimo, e o
+    // AbortController acima garante que vence a última escolha, não a última
+    // resposta a chegar.
+    <main className="sada-wrap" aria-busy={carregando}
+      style={carregando ? { opacity: 0.55, transition: "opacity .15s" } : undefined}>
       <header className="sada-head">
         <div>
           <h1>SADA — Análise de Dívida Ativa</h1>

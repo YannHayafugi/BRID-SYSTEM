@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ComoUsar, Dica } from "@/app/components/Ajuda";
 import { RelatorioQualidade, ROTULO_TIPO, TIPOS_SADA, TipoSada } from "@/lib/sada/import";
-import { AbaEscolhida, AbasModo, Mapa } from "@/lib/sada/depara";
+import { AbaEscolhida, AbasModo, camposDoTipo, Mapa } from "@/lib/sada/depara";
 import { somenteDigitos } from "@/lib/mascaras";
 import type { DoWorker, ParaWorker } from "./importador.worker";
 
@@ -38,6 +38,24 @@ const LOTE = 2500;
  * é enviado ao servidor, que lê em streaming.
  */
 const LIMITE_NAVEGADOR = 80 * 1024 * 1024;
+
+/** Duração em português curto: "40 s", "3 min", "1 h 12 min". */
+function duracao(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+/** Nome técnico do campo -> rótulo de gente, para a lista de "não coberto". */
+function rotuloCampo(campo: string): string {
+  for (const tipo of TIPOS_SADA) {
+    const achado = camposDoTipo(tipo, "ano_na_coluna").find((c) => c.campo === campo);
+    if (achado) return achado.rotulo.replace(/\s*\(.*\)$/, "").toLowerCase();
+  }
+  return campo;
+}
 
 /** Acompanhamento de uma importação feita pelo servidor. */
 interface JobServidor {
@@ -81,6 +99,10 @@ export default function AtualizacaoDivida() {
   /** O que este servidor aguenta. Nulo enquanto não respondeu. */
   const [capacidade, setCapacidade] = useState<{ suportaGrande: boolean; via: string } | null>(null);
 
+  /** Quando a execução atual começou — base do tempo restante. */
+  const inicio = useRef<number | null>(null);
+  const [restante, setRestante] = useState<string | null>(null);
+
   const worker = useRef<Worker | null>(null);
   /** Resolve ou rejeita a mensagem que está em curso no worker. */
   const emCurso = useRef<{ ok: (m: DoWorker) => void; falha: (e: Error) => void } | null>(null);
@@ -112,6 +134,22 @@ export default function AtualizacaoDivida() {
     worker.current = w;
     return () => { w.terminate(); worker.current = null; };
   }, []);
+
+  /**
+   * Tempo restante, estimado pelo ritmo até agora.
+   *
+   * Só a partir de 5%: antes disso a conta é dominada pela leitura inicial e
+   * produziria números absurdos ("faltam 2 h") que ninguém leva a sério
+   * depois. Fica em silêncio enquanto não há base para estimar — é o caso do
+   * caminho do servidor, que não reporta percentual durante a leitura.
+   */
+  useEffect(() => {
+    if (!rodando) { inicio.current = null; setRestante(null); return; }
+    if (inicio.current === null) inicio.current = Date.now();
+    if (progresso < 5 || progresso >= 100) { setRestante(null); return; }
+    const decorrido = Date.now() - inicio.current;
+    setRestante(duracao((decorrido / progresso) * (100 - progresso)));
+  }, [rodando, progresso]);
 
   // Pergunta ao servidor, ao abrir a tela, se ele aguenta arquivo grande.
   // Sem isto a pessoa só descobriria a recusa depois de escolher um arquivo de
@@ -591,6 +629,9 @@ export default function AtualizacaoDivida() {
             </div>
             <p className="detalhe" style={{ marginTop: 6 }}>
               {status} {progresso > 0 ? `${progresso}%` : ""}
+              {/* Numa carga de vários minutos, percentual sozinho não responde
+                  a única pergunta que a pessoa tem: dá tempo de tomar um café? */}
+              {restante && <> · faltam ~{restante}</>}
               {job && (
                 <>
                   {" "}· acompanhamento nº {job.id} — pode fechar a aba e voltar depois.
@@ -598,6 +639,18 @@ export default function AtualizacaoDivida() {
               )}
             </p>
           </div>
+        )}
+
+        {/* Uma linha, em vez de um aviso por linha do arquivo. Sem isto, um
+            export sem inscrição rendia "Inscrição vazia" em todas as linhas e
+            enterrava os achados reais. */}
+        {relatorio && relatorio.camposNaoCobertos?.length > 0 && (
+          <p className="detalhe" style={{ marginTop: 12 }}>
+            O DE/PARA deste ente não cobre{" "}
+            <strong>{relatorio.camposNaoCobertos.map(rotuloCampo).join(", ")}</strong> — as
+            verificações desses campos foram puladas. Se a planilha tiver essas colunas,
+            falta mapeá-las em <Link href="/sada/depara">DE/PARA</Link>.
+          </p>
         )}
 
         {relatorio && relatorio.achados.length > 0 && (

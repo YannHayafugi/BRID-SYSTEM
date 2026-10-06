@@ -424,6 +424,15 @@ export interface MapaCompilado {
   origensAusentes: string[];
   /** Campos recomendados sem origem (ex.: sequencia) — só avisa. */
   semRecomendado: string[];
+  /**
+   * Campos que este mapa realmente preenche.
+   *
+   * Quem verifica a qualidade precisa saber a diferença entre "o ente mandou
+   * a coluna vazia" e "o arquivo não tem essa coluna": sem isso, um export sem
+   * inscrição rende um aviso por linha — 1,4 milhão deles no T-1138 — e o
+   * ruído esconde os achados que importam.
+   */
+  cobertos: string[];
 }
 
 /** nome normalizado da coluna -> índice. Primeira ocorrência vence. */
@@ -491,6 +500,9 @@ export function compilarMapa(
     faltando,
     origensAusentes,
     semRecomendado,
+    // Um passo por campo que o mapa preenche — é exatamente o que `aplicar`
+    // vai escrever no registro.
+    cobertos: passos.map((p) => p.campo),
     aplicar(linha: unknown[]) {
       const out: Record<string, unknown> = {};
       for (const p of passos) out[p.campo] = p.ler(linha);

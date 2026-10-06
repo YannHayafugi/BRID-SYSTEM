@@ -127,6 +127,15 @@ export async function lerArquivo(
   const anos = new Set<number>();
   const faltando = new Set<string>();
   const origensAusentes = new Set<string>();
+  /**
+   * Campos que o mapa preenche, na INTERSEÇÃO das abas: só é julgado o campo
+   * que todas trazem. Se uma aba não tem a coluna, julgar as linhas dela
+   * renderia um aviso por linha — o ruído que a lista existe para evitar.
+   */
+  let cobertos: string[] | null = null;
+  const registrarCobertos = (campos: string[]) => {
+    cobertos = cobertos === null ? campos : cobertos.filter((c) => campos.includes(c));
+  };
 
   let lidas = 0;
   let bloco: Record<string, unknown>[] = [];
@@ -164,9 +173,9 @@ export async function lerArquivo(
   };
 
   if (TEXTO.test(nomeArquivo)) {
-    await lerTexto(caminho, tipo, cfg, traduzir, empurrar, faltando, origensAusentes);
+    await lerTexto(caminho, tipo, cfg, traduzir, empurrar, faltando, origensAusentes, registrarCobertos);
   } else {
-    await lerXlsx(caminho, tipo, cfg, traduzir, empurrar, faltando, origensAusentes);
+    await lerXlsx(caminho, tipo, cfg, traduzir, empurrar, faltando, origensAusentes, registrarCobertos);
   }
 
   if (bloco.length) {
@@ -177,7 +186,11 @@ export async function lerArquivo(
   const relatorio = analisarQualidade(
     tipo,
     [{ ano: 0, registros: achados }],
-    { faltando: [...faltando], origensAusentes: [...origensAusentes] },
+    {
+      faltando: [...faltando],
+      origensAusentes: [...origensAusentes],
+      camposMapeados: cobertos ?? [],
+    },
   );
   // O total do relatório é o da amostra; o do arquivo é `lidas`.
   relatorio.totalLinhas = lidas;
@@ -193,6 +206,7 @@ async function lerTexto(
   empurrar: (reg: Record<string, unknown>) => Promise<void>,
   faltando: Set<string>,
   origensAusentes: Set<string>,
+  registrarCobertos: (campos: string[]) => void,
 ) {
   const rl = createInterface({
     input: createReadStream(caminho, { encoding: "utf8" }),
@@ -215,6 +229,7 @@ async function lerTexto(
       });
       compilado.faltando.forEach((f) => faltando.add(f));
       compilado.origensAusentes.forEach((o) => origensAusentes.add(o));
+      registrarCobertos(compilado.cobertos);
       continue;
     }
     const cels = celulas(linha, sep);
@@ -231,6 +246,7 @@ async function lerXlsx(
   empurrar: (reg: Record<string, unknown>) => Promise<void>,
   faltando: Set<string>,
   origensAusentes: Set<string>,
+  registrarCobertos: (campos: string[]) => void,
 ) {
   // `sharedStrings: cache` é o que permite ler valores de texto sem abrir o
   // arquivo inteiro. É também o que mais consome memória num xlsx grande:
@@ -276,6 +292,7 @@ async function lerXlsx(
         });
         compilado.faltando.forEach((f) => faltando.add(f));
         compilado.origensAusentes.forEach((o) => origensAusentes.add(o));
+        registrarCobertos(compilado.cobertos);
         continue;
       }
       if (linhaVazia(cels)) continue;
