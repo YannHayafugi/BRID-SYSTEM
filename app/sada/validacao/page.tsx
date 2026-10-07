@@ -206,6 +206,29 @@ export default function ValidacaoTributariaPage() {
     XLSX.writeFile(wb, `sada-${codigo}-${quem}.xlsx`.replace(/[^\p{L}\p{N}._-]+/gu, "-"));
   }
 
+  /**
+   * Recarrega os números depois de um recálculo.
+   *
+   * `no-store` de propósito: a rota manda `Cache-Control` de 30 s, e sem isto
+   * a tela mostraria justamente os números velhos que acabamos de esperar
+   * para recalcular.
+   */
+  async function recarregarChecks() {
+    try {
+      const r = await fetch(`/api/sada/validacao?${qs({ modo: "resumo" })}`, { cache: "no-store" });
+      const j = await r.json();
+      if (r.ok) { setChecks(j.checks ?? []); setResumo(j.resumo ?? null); }
+    } catch {
+      /* silêncio: o resultado do salvar já foi reportado */
+    }
+  }
+
+  /**
+   * Salvar leva ~11 s: a validação tributária é materializada, e a regra nova
+   * só vale depois do recálculo. Sem dizer isso, a tela parece travada —
+   * então o estado de "salvando" avisa, e no fim os números são recarregados,
+   * que é o ponto de ter esperado.
+   */
   async function salvarRegra() {
     if (!rascunho) return;
     setSalvando(true);
@@ -220,6 +243,14 @@ export default function ValidacaoTributariaPage() {
       if (!r.ok) throw new Error(j.erro || "Falha ao salvar.");
       setRegras((atual) => ordenar([...(atual ?? []).filter((x) => x.id !== j.regra.id), j.regra]));
       setRascunho(null);
+      if (j.avisoRecalculo) {
+        // A regra está salva; o que falhou foi o recálculo. Dizer qual das
+        // duas coisas aconteceu evita a pessoa salvar de novo achando que
+        // perdeu o trabalho.
+        setErro(`Regra salva, mas os números não foram recalculados: ${j.avisoRecalculo}`);
+      } else {
+        await recarregarChecks();
+      }
     } catch (e) {
       setErro((e as Error).message);
     } finally {
@@ -235,6 +266,11 @@ export default function ValidacaoTributariaPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro || "Falha ao excluir.");
       setRegras((atual) => (atual ?? []).filter((x) => x.id !== id));
+      if (j.avisoRecalculo) {
+        setErro(`Regra excluída, mas os números não foram recalculados: ${j.avisoRecalculo}`);
+      } else {
+        await recarregarChecks();
+      }
     } catch (e) {
       setErro((e as Error).message);
     }
@@ -699,9 +735,18 @@ function FormularioRegra({
 
       <div style={{ marginTop: 12 }}>
         <button className="btn" onClick={onSalvar} disabled={salvando || !regra.vigenciaInicio || !regra.cnpjOrgao}>
-          {salvando ? "Salvando…" : "Salvar regra"}
+          {salvando ? "Salvando e recalculando…" : "Salvar regra"}
         </button>{" "}
         <button className="btn secondary" onClick={onCancelar}>Cancelar</button>
+        {/* Onze segundos sem explicação parecem travamento. Com a conta à
+            vista, parecem o que são: a base inteira sendo reconferida contra
+            a regra que acabou de mudar. */}
+        {salvando && (
+          <p className="detalhe" style={{ marginTop: 8 }}>
+            Reconferindo a base inteira com a regra nova — leva cerca de 12 segundos.
+            Os números da tela são atualizados no fim.
+          </p>
+        )}
       </div>
     </div>
   );
