@@ -86,12 +86,17 @@ export default function QualidadePage() {
   }, []);
 
   // Resumo: refaz a cada troca de cliente e fecha o que estiver expandido.
+  //
+  // O AbortController evita o que a troca rápida de cliente provocava: duas
+  // respostas em voo e a última a CHEGAR vencendo a última ESCOLHIDA — a tela
+  // ficava com os números de outro cliente, sem erro nenhum.
   useEffect(() => {
+    const ctrl = new AbortController();
     setChecks(null);
     setExpandido(null);
     setLinhas(null);
     setErro("");
-    fetch(`/api/sada/qualidade?${qs({ modo: "resumo" })}`)
+    fetch(`/api/sada/qualidade?${qs({ modo: "resumo" })}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (r.status === 401) { window.location.href = "/login"; return; }
         const j = await r.json();
@@ -99,7 +104,8 @@ export default function QualidadePage() {
         setChecks(j.checks ?? []);
         setResumo(j.resumo ?? null);
       })
-      .catch((e) => setErro(e.message));
+      .catch((e) => { if (e.name !== "AbortError") setErro(e.message); });
+    return () => ctrl.abort();
   }, [qs]);
 
   async function carregarLinhas(modo: string, codigo?: string) {

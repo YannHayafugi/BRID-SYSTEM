@@ -153,7 +153,11 @@ export default function ValidacaoTributariaPage() {
     setRascunho(null);
     setErro("");
 
-    fetch(`/api/sada/validacao?${qs({ modo: "resumo" })}`)
+    // Ver o comentário equivalente na tela de Qualidade: sem abortar, a
+    // resposta de um cliente anterior podia sobrescrever a do atual.
+    const ctrl = new AbortController();
+
+    fetch(`/api/sada/validacao?${qs({ modo: "resumo" })}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (r.status === 401) { window.location.href = "/login"; return; }
         const j = await r.json();
@@ -161,15 +165,17 @@ export default function ValidacaoTributariaPage() {
         setChecks(j.checks ?? []);
         setResumo(j.resumo ?? null);
       })
-      .catch((e) => setErro(e.message));
+      .catch((e) => { if (e.name !== "AbortError") setErro(e.message); });
 
-    fetch(`/api/sada/regras?${qs({})}`)
+    fetch(`/api/sada/regras?${qs({})}`, { signal: ctrl.signal })
       .then(async (r) => {
         const j = await r.json();
         if (!r.ok) throw new Error(j.erro || "Falha ao carregar as regras.");
         setRegras(ordenar(j.regras ?? []));
       })
-      .catch((e) => setErro((e as Error).message));
+      .catch((e) => { if ((e as Error).name !== "AbortError") setErro((e as Error).message); });
+
+    return () => ctrl.abort();
   }, [qs]);
 
   async function alternarCheck(c: Check) {

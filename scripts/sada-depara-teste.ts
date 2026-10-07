@@ -211,5 +211,43 @@ ok("ano valido nao gera achado de ano",
   !relAnoBom.achados.some((a) => a.codigo === "ano_invalido"));
 
 // ---------------------------------------------------------------------
+// Campo que o mapa NAO cobre nao vira aviso por linha
+//
+// O export do T-1138 nao traz inscricao: antes disso, a regra "inscricao
+// vazia" marcava 1,4 milhao de linhas e enterrava os achados reais. A
+// verificacao do campo e pulada e a tela diz, uma vez, o que ficou de fora.
+// ---------------------------------------------------------------------
+console.log("\nCampo nao coberto pelo mapa");
+
+const semInscricao = regs(3).map((r) => {
+  const copia = { ...(r as Record<string, unknown>) };
+  delete copia.inscricao;
+  return copia;
+});
+
+const relSemCobertura = analisarQualidade(
+  "divida_ativa",
+  [{ ano: 2024, registros: semInscricao }],
+  // O que compilarMapa devolveria: tudo menos inscricao.
+  { faltando: [], origensAusentes: [], camposMapeados: ["ano", "sigla", "cnpj_cpf", "valor", "total"] },
+);
+ok("inscricao fora do mapa nao vira achado",
+  !relSemCobertura.achados.some((a) => a.codigo === "inscricao_vazia"),
+  JSON.stringify(relSemCobertura.achados.map((a) => a.codigo)));
+ok("e a tela recebe a lista do que ficou de fora",
+  relSemCobertura.camposNaoCobertos.includes("inscricao"),
+  JSON.stringify(relSemCobertura.camposNaoCobertos));
+
+// Sem a lista (quem monta o registro sem passar por mapa), julga tudo —
+// senao esta mudanca silenciaria as verificacoes dos outros chamadores.
+const relSemEstrutura = analisarQualidade(
+  "divida_ativa",
+  [{ ano: 2024, registros: semInscricao }],
+);
+ok("sem camposMapeados a verificacao continua valendo",
+  relSemEstrutura.achados.some((a) => a.codigo === "inscricao_vazia"),
+  JSON.stringify(relSemEstrutura.achados.map((a) => a.codigo)));
+
+// ---------------------------------------------------------------------
 console.log(falhas === 0 ? "\nTUDO OK" : `\n${falhas} FALHA(S)`);
 process.exit(falhas === 0 ? 0 : 1);
