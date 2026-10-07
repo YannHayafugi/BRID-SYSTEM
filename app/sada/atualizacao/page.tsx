@@ -57,6 +57,14 @@ function rotuloCampo(campo: string): string {
   return campo;
 }
 
+/** Um arquivo na fila de importação. */
+interface ItemFila {
+  arquivo: File;
+  estado: "pendente" | "rodando" | "concluido" | "erro";
+  /** Resultado (linhas e anos) ou o motivo da falha. */
+  mensagem?: string;
+}
+
 /** Acompanhamento de uma importação feita pelo servidor. */
 interface JobServidor {
   id: number;
@@ -83,7 +91,20 @@ interface ConfigDePara {
 export default function AtualizacaoDivida() {
   const [tipo, setTipo] = useState<TipoSada>("divida_ativa");
   const [cnpj, setCnpj] = useState("");
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  /**
+   * Fila de arquivos.
+   *
+   * Um export grande costuma vir partido — o T-1138 virou cinco arquivos, um
+   * por faixa de anos. Com um arquivo por vez, a pessoa voltava à tela cinco
+   * vezes e precisava lembrar a ordem. Aqui ela escolhe todos de uma vez e a
+   * tela importa um depois do outro, mostrando onde parou.
+   *
+   * Cada item vira um lote próprio, como se tivesse sido enviado sozinho: a
+   * regra de aposentar só os lotes dos mesmos anos é que faz isso funcionar.
+   */
+  const [fila, setFila] = useState<ItemFila[]>([]);
+  const [indice, setIndice] = useState(0);
+  const arquivo = fila[indice]?.arquivo ?? null;
   const [rodando, setRodando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [status, setStatus] = useState("");
@@ -228,15 +249,23 @@ export default function AtualizacaoDivida() {
     return j;
   }
 
-  /** `forcar` = usuário já viu os avisos e mandou seguir mesmo assim. */
-  async function atualizar(forcar = false) {
+  /**
+   * `forcar` = usuário já viu os avisos e mandou seguir mesmo assim.
+   *
+   * O arquivo e a posição na fila vêm por PARÂMETRO, não do estado: ao
+   * encadear o próximo da fila, `setIndice` ainda não terá surtido efeito e
+   * esta função importaria o arquivo anterior de novo.
+   */
+  async function atualizar(forcar = false, alvo?: File, posicao?: number) {
+    const arq = alvo ?? arquivo;
+    const pos = posicao ?? indice;
     setErro(""); setConcluido(null);
     if (!cnpj.trim()) { setErro("Informe o CNPJ do ente."); return; }
-    if (!arquivo) { setErro("Selecione a planilha (.xlsx)."); return; }
+    if (!arq) { setErro("Selecione a planilha (.xlsx)."); return; }
 
     // Recusa antes de começar: subir 2 GB para receber "não suportado" no fim
     // seria desperdiçar a espera inteira.
-    if (arquivo.size > LIMITE_NAVEGADOR && capacidade?.suportaGrande === false) {
+    if (arq.size > LIMITE_NAVEGADOR && capacidade?.suportaGrande === false) {
       setErro(
         `Este servidor lê no máximo ${Math.round(LIMITE_NAVEGADOR / 1048576)} MB por arquivo ` +
         "(não tem disco próprio). Peça o arquivo dividido — por ano, por exemplo — ou em CSV menor.",
@@ -245,14 +274,19 @@ export default function AtualizacaoDivida() {
     }
 
     setRodando(true); setProgresso(0); setStatus("Preparando…"); setJob(null);
+    marcar(pos, "rodando");
     let importacaoId: number | null = null;
+    /** Encadear o próximo DENTRO do try ligava o arquivo seguinte antes de
+     *  este terminar, e o `finally` daqui apagava o "rodando" com a próxima
+     *  importação já em curso. O encadeamento é no fim, depois do finally. */
+    let seguir = false;
 
     try {
       // Arquivo grande não passa pelo navegador: sobe para o servidor, que lê
       // em streaming. A verificação de qualidade continua existindo — só que
       // roda lá, com o mesmo código.
-      if (arquivo.size > LIMITE_NAVEGADOR) {
-        await enviarAoServidor();
+      if (arq.size > LIMITE_NAVEGADOR) {
+        await enviarAoServidor(arq);
         return;
       }
       // Só dígitos: a mesma chave usada pelo DE/PARA e gravada nas tabelas.
@@ -262,14 +296,14 @@ export default function AtualizacaoDivida() {
       // — são dezenas de segundos de leitura a menos.
       const feito = analisado.current;
       let anos: number[];
-      if (forcar && feito && feito.arquivo === arquivo && feito.tipo === tipo
+      if (forcar && feito && feito.arquivo === arq && feito.tipo === tipo
           && feito.cnpj === cnpjLimpo && feito.mapa === mapaNome) {
         anos = feito.anos;
       } else {
         setStatus("Carregando o DE/PARA do ente…");
         const cfg = await carregarDePara(cnpjLimpo, tipo, mapaNome);
 
-        const buffer = await arquivo.arrayBuffer();
+        const buffer = await arq.arrayBuffer();
         // O ArrayBuffer é TRANSFERIDO, não copiado: são dezenas de MB.
         const resp = await pedir(
           {
@@ -290,7 +324,7 @@ export default function AtualizacaoDivida() {
         if (resp.tipo !== "analise") throw new Error("Resposta inesperada do processador.");
 
         setRelatorio(resp.relatorio);
-        analisado.current = { arquivo, tipo, cnpj: cnpjLimpo, mapa: mapaNome, anos: resp.anos };
+        analisado.current = { arquivo: arq, tipo, cnpj: cnpjLimpo, mapa: mapaNome, anos: resp.anos };
         anos = resp.anos;
 
         if (resp.relatorio.temBloqueio) {
@@ -309,7 +343,7 @@ export default function AtualizacaoDivida() {
       setStatus("Iniciando importação…");
       setProgresso(0);
       const ini = await post("/api/sada/importar", {
-        cnpj: cnpjLimpo, tipo, arquivoNome: arquivo.name,
+        cnpj: cnpjLimpo, tipo, arquivoNome: arq.name,
         // Sem isto o servidor aposenta todos os lotes do ente+tipo, e uma
         // importação de um ano só faz os demais sumirem dos dashboards.
         anos,
@@ -330,19 +364,46 @@ export default function AtualizacaoDivida() {
       setProgresso(100);
       setRelatorio(null);
       analisado.current = null;
-      setConcluido(
+      const resultado =
         `${fim.total.toLocaleString("pt-BR")} linhas atualizadas ` +
-        `(${Math.min(...anos)}–${Math.max(...anos)}).`,
-      );
+        `(${Math.min(...anos)}–${Math.max(...anos)}).`;
+      setConcluido(resultado);
+      marcar(pos, "concluido", resultado);
+      seguir = true;
     } catch (e) {
       setErro((e as Error).message);
+      marcar(pos, "erro", (e as Error).message);
       if (importacaoId) {
         // desfaz o lote incompleto para não deixar dado parcial
         await post("/api/sada/importar/finalizar", { importacaoId, cancelar: true }).catch(() => {});
       }
+      // A fila PARA no erro, de propósito: seguir adiante enterraria a falha
+      // numa tela que continua rolando, e o arquivo seguinte pode depender de
+      // o anterior ter entrado. Quem decide pular é a pessoa.
     } finally {
       setRodando(false); setStatus("");
+      if (seguir) seguirFila(pos);
     }
+  }
+
+  /** Marca um item da fila sem depender do estado anterior em closure. */
+  function marcar(pos: number, estado: ItemFila["estado"], mensagem?: string) {
+    setFila((f) => f.map((it, i) => (i === pos ? { ...it, estado, mensagem } : it)));
+  }
+
+  /** Vai para o próximo arquivo pendente, se houver. */
+  function seguirFila(pos: number) {
+    const prox = pos + 1;
+    if (prox >= fila.length) return;
+    setIndice(prox);
+    resetarVerificacao();
+    void atualizar(false, fila[prox].arquivo, prox);
+  }
+
+  /** Pula o arquivo que falhou e continua a fila. */
+  function pularEContinuar() {
+    setErro(""); setRelatorio(null);
+    seguirFila(indice);
   }
 
   /** Interrompe o envio. O worker para no lote seguinte e o catch acima
@@ -364,11 +425,11 @@ export default function AtualizacaoDivida() {
    * subiu — num arquivo de vários GB, ficar sem retorno por meia hora é
    * indistinguível de travamento.
    */
-  async function enviarAoServidor() {
+  async function enviarAoServidor(arq: File) {
     const cnpjLimpo = somenteDigitos(cnpj);
     const url =
       `/api/sada/importar/arquivo?cnpj=${encodeURIComponent(cnpjLimpo)}&tipo=${tipo}` +
-      `&arquivo=${encodeURIComponent(arquivo!.name)}` +
+      `&arquivo=${encodeURIComponent(arq.name)}` +
       (mapaNome ? `&mapa=${encodeURIComponent(mapaNome)}` : "");
 
     setStatus("Enviando o arquivo ao servidor…");
@@ -386,7 +447,7 @@ export default function AtualizacaoDivida() {
         else falha(new Error(j.erro || `Falha no envio (HTTP ${xhr.status}).`));
       };
       xhr.onerror = () => falha(new Error("Conexão interrompida durante o envio."));
-      xhr.send(arquivo);
+      xhr.send(arq);
     });
 
     setProgresso(0);
@@ -597,8 +658,17 @@ export default function AtualizacaoDivida() {
               }
             />
           </label>
-          <input type="file" accept=".xlsx" disabled={rodando}
-            onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); resetarVerificacao(); }} />
+          <input type="file" accept=".xlsx" multiple disabled={rodando}
+            onChange={(e) => {
+              const escolhidos = Array.from(e.target.files ?? []);
+              // Ordem alfabética: os arquivos partidos saem numerados ("1
+              // (1995-2015)", "2 (2016-2019)"), então é a ordem que a pessoa
+              // espera — e não a ordem em que o sistema operacional entregou.
+              escolhidos.sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true }));
+              setFila(escolhidos.map((f) => ({ arquivo: f, estado: "pendente" as const })));
+              setIndice(0);
+              resetarVerificacao();
+            }} />
           <small>
             Uma aba por ano. Até {Math.round(LIMITE_NAVEGADOR / 1048576)} MB o arquivo
             é lido no próprio navegador.
@@ -613,13 +683,46 @@ export default function AtualizacaoDivida() {
                 deixa a carga bem mais lenta.</>
               )}</>
             )}
-            {arquivo && (
-              <> Selecionado: <strong>{(arquivo.size / 1048576).toFixed(1)} MB</strong>
-              {arquivo.size > LIMITE_NAVEGADOR
-                ? (capacidade?.suportaGrande === false ? " — grande demais para este servidor." : " — vai pelo servidor.")
-                : " — lido aqui."}</>
-            )}
+            {" "}Pode escolher <strong>vários de uma vez</strong>: entram numa fila e são
+            importados um depois do outro, cada um virando seu próprio lote.
           </small>
+
+          {/* A fila: onde está, o que já entrou e o que falhou. Com cinco
+              arquivos, saber em qual deles parou é metade da informação. */}
+          {fila.length > 0 && (
+            <table className="sada-tabela" style={{ marginTop: 10 }}>
+              <thead>
+                <tr><th>Arquivo</th><th>Tamanho</th><th>Situação</th></tr>
+              </thead>
+              <tbody>
+                {fila.map((it, i) => (
+                  <tr key={`${it.arquivo.name}-${i}`}
+                    style={i === indice && rodando ? { fontWeight: 600 } : undefined}>
+                    <td>
+                      {it.arquivo.name}
+                      {it.mensagem && <><br /><small>{it.mensagem}</small></>}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {(it.arquivo.size / 1048576).toFixed(1)} MB
+                      {it.arquivo.size > LIMITE_NAVEGADOR && (
+                        <><br /><small>
+                          {capacidade?.suportaGrande === false
+                            ? "grande demais para este servidor"
+                            : "vai pelo servidor"}
+                        </small></>
+                      )}
+                    </td>
+                    <td>
+                      {it.estado === "pendente" && <span className="detalhe">na fila</span>}
+                      {it.estado === "rodando" && <span className="tag aviso">importando</span>}
+                      {it.estado === "concluido" && <span className="tag ok">concluído</span>}
+                      {it.estado === "erro" && <span className="tag bloqueio">falhou</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {rodando && (
@@ -685,15 +788,22 @@ export default function AtualizacaoDivida() {
         )}
 
         <div className="actions">
-          <button className="btn" onClick={() => atualizar()} disabled={rodando}>
+          <button className="btn" onClick={() => atualizar(false, arquivo ?? undefined, indice)} disabled={rodando}>
             {rodando ? "Atualizando…" : "Atualizar dívida"}
           </button>
           {rodando && (
             <button className="btn secondary" onClick={cancelar}>Cancelar</button>
           )}
           {relatorio && !relatorio.temBloqueio && relatorio.achados.length > 0 && !rodando && (
-            <button className="btn secondary" onClick={() => atualizar(true)}>
+            <button className="btn secondary" onClick={() => atualizar(true, arquivo ?? undefined, indice)}>
               Importar mesmo assim
+            </button>
+          )}
+          {/* A fila para no erro de proposito; continuar é decisão de quem
+              olhou o motivo. Os arquivos são independentes entre si. */}
+          {!rodando && fila[indice]?.estado === "erro" && indice + 1 < fila.length && (
+            <button className="btn secondary" onClick={pularEContinuar}>
+              Pular e importar o próximo ({fila.length - indice - 1} na fila)
             </button>
           )}
           {erro && <span className="msg erro">{erro}</span>}

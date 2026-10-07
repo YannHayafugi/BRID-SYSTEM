@@ -720,6 +720,7 @@ textarea {
 }
 .sada-tabela .tag.aviso    { background: #b57d18; }
 .sada-tabela .tag.bloqueio { background: #b23c3c; }
+.sada-tabela .tag.ok       { background: #1f7a3d; }
 .sada-tabela select,
 .sada-tabela input[type="text"],
 .sada-tabela input:not([type]) { width: 100%; min-width: 130px; }
