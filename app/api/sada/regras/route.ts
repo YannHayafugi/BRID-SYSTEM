@@ -6,6 +6,30 @@ import { cnpjsDoFiltro } from "@/lib/sada/clientes";
 import { TRIBUTO_TODOS, type NivelRegra, type RegraTributaria } from "@/lib/sada/tributario";
 
 export const runtime = "nodejs";
+/**
+ * O recálculo da validação tributária leva ~11 s (medido), e o padrão da
+ * plataforma é 10 s — sem isto, salvar uma regra falharia por tempo esgotado
+ * bem na hora de responder, parecendo um defeito.
+ */
+export const maxDuration = 60;
+
+/**
+ * Recalcula a validação tributária depois de mexer nas regras.
+ *
+ * `sada_vw_validacao_tributaria` é materializada (ler custa 0 ms em vez de
+ * 12,5 s), e o preço disso é que ela congela: uma regra nova só aparece
+ * depois deste recálculo. Daí salvar e excluir levarem ~11 s.
+ *
+ * Função própria, e não `sada_refresh_mvs`, para não pagar o refresh das
+ * outras oito MVs — que dependem dos dados importados, não das regras.
+ *
+ * Falha aqui NÃO desfaz a gravação: a regra está salva, o que ficou velho é
+ * o painel. A rota devolve o aviso e a tela mostra.
+ */
+async function recalcular(): Promise<string | null> {
+  const { error } = await getSupabaseAdmin().rpc("sada_refresh_validacao");
+  return error ? error.message : null;
+}
 
 /**
  * Regras da validação tributária, em dois níveis:
@@ -203,7 +227,11 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ erro: resposta.error.message }, { status: 500 });
   }
-  return NextResponse.json({ regra: daLinha(resposta.data as Record<string, unknown>) });
+  const avisoRecalculo = await recalcular();
+  return NextResponse.json({
+    regra: daLinha(resposta.data as Record<string, unknown>),
+    ...(avisoRecalculo ? { avisoRecalculo } : {}),
+  });
 }
 
 /** DELETE /api/sada/regras?id=123 */
@@ -223,5 +251,7 @@ export async function DELETE(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const { error } = await sb.from("sada_regra_tributaria").delete().eq("id", id);
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+
+  const avisoRecalculo = await recalcular();
+  return NextResponse.json({ ok: true, ...(avisoRecalculo ? { avisoRecalculo } : {}) });
 }
