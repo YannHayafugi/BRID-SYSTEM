@@ -104,6 +104,7 @@ export default function BarraUsuario() {
           { href: "/sada/cnpj", rotulo: "CNPJ" },
         ],
         [
+          { href: "/sada/debenture", rotulo: "Debênture" },
           { href: "/sada/atualizacao", rotulo: "Atualização da dívida" },
           { href: "/sada/depara", rotulo: "DE/PARA" },
         ],
