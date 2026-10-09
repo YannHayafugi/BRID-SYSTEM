@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { cagr, estimarEncargos, tendenciaLogLinear } from "@/lib/sada/previsao";
+import { CACHE_LEITURA } from "@/lib/sada/cache";
 
 export const runtime = "nodejs";
 
@@ -145,5 +146,5 @@ export async function GET() {
       arrecadadoDa: serie.filter((s) => s.arrecadado_da != null)
         .map((s) => ({ ano: s.ano, valor: Number(s.arrecadado_da) })),
     },
-  });
+  }, { headers: CACHE_LEITURA });
 }

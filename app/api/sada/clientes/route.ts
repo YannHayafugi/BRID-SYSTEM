@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { somenteDigitos } from "@/lib/mascaras";
+import { CACHE_LEITURA } from "@/lib/sada/cache";
 
 export const runtime = "nodejs";
 
@@ -63,7 +64,7 @@ export async function GET() {
     primeiraImportacao: p.primeira_importacao as string | null,
   }));
 
-  return NextResponse.json({ clientes, pendentes: fila });
+  return NextResponse.json({ clientes, pendentes: fila }, { headers: CACHE_LEITURA });
 }
 
 /** POST /api/sada/clientes — vincula um CNPJ a um cliente. */

@@ -102,6 +102,18 @@ export interface RegraQualidade {
   codigo: string;
   rotulo: string;
   severidade: Severidade;
+  /**
+   * Campo de destino que a regra julga.
+   *
+   * Regra cujo campo o mapa NÃO cobre é pulada. A diferença importa: "o ente
+   * mandou a coluna vazia" é um achado; "o arquivo não tem essa coluna" é
+   * cadastro, e render um aviso por linha — 1,4 milhão deles no export do
+   * T-1138, que não traz inscrição — só serve para esconder o que importa.
+   * A tela passa a dizer, uma vez, quais campos o mapa não cobre.
+   *
+   * Sem `campo` a regra vale sempre (ex.: linha inteira repetida).
+   */
+  campo?: string;
   /** true quando a linha apresenta o problema. */
   falha: (r: Record<string, unknown>) => boolean;
 }
@@ -120,6 +132,7 @@ const REGRAS_COMUNS: RegraQualidade[] = [
     // views atuais funcionam (nenhuma usa sequencia); o que fica de fora é a
     // recuperação por título, que cruza as tabelas por essa coluna.
     codigo: "sequencia_nula",
+    campo: "sequencia",
     rotulo: "Sequência vazia (sem ela não dá para cruzar título a título entre as tabelas)",
     severidade: "aviso",
     falha: (r) => r.sequencia === null,
@@ -130,6 +143,7 @@ const REGRAS_COMUNS: RegraQualidade[] = [
     // coluna `ano` é not null no banco — a carga morreria no meio e deixaria
     // o lote pela metade.
     codigo: "ano_invalido",
+    campo: "ano",
     rotulo: "Ano/exercício da linha vazio ou fora de 1980–2100",
     severidade: "bloqueio",
     // Só julga quem TEM o campo: registro sem `ano` nenhum é problema de
@@ -142,18 +156,21 @@ const REGRAS_COMUNS: RegraQualidade[] = [
   },
   {
     codigo: "sigla_vazia",
+    campo: "sigla",
     rotulo: "Sigla do tributo vazia",
     severidade: "bloqueio",
     falha: (r) => vazio(r.sigla),
   },
   {
     codigo: "cnpj_cpf_zerado",
+    campo: "cnpj_cpf",
     rotulo: "CNPJ/CPF do contribuinte zerado ou vazio",
     severidade: "aviso",
     falha: (r) => docZerado(r.cnpj_cpf),
   },
   {
     codigo: "inscricao_vazia",
+    campo: "inscricao",
     rotulo: "Inscrição vazia",
     severidade: "aviso",
     falha: (r) => vazio(r.inscricao),
@@ -165,12 +182,14 @@ export const REGRAS_QUALIDADE: Record<TipoSada, RegraQualidade[]> = {
     ...REGRAS_COMUNS,
     {
       codigo: "valor_nao_positivo",
+    campo: "valor",
       rotulo: "Valor principal nulo ou ≤ 0",
       severidade: "aviso",
       falha: (r) => naoPositivo(r.valor),
     },
     {
       codigo: "total_nulo",
+    campo: "total",
       rotulo: "Total nulo (o título fica só com o principal)",
       severidade: "aviso",
       falha: (r) => r.total === null,
@@ -180,6 +199,7 @@ export const REGRAS_QUALIDADE: Record<TipoSada, RegraQualidade[]> = {
     ...REGRAS_COMUNS,
     {
       codigo: "valor_nao_positivo",
+    campo: "valor",
       rotulo: "Valor do lançamento nulo ou ≤ 0",
       severidade: "aviso",
       falha: (r) => naoPositivo(r.valor),
@@ -189,6 +209,7 @@ export const REGRAS_QUALIDADE: Record<TipoSada, RegraQualidade[]> = {
     ...REGRAS_COMUNS,
     {
       codigo: "totaldam_nao_positivo",
+    campo: "totaldam",
       rotulo: "Total do DAM nulo ou ≤ 0",
       severidade: "aviso",
       falha: (r) => naoPositivo(r.totaldam),
@@ -198,6 +219,7 @@ export const REGRAS_QUALIDADE: Record<TipoSada, RegraQualidade[]> = {
     ...REGRAS_COMUNS,
     {
       codigo: "totaldam_nao_positivo",
+    campo: "totaldam",
       rotulo: "Total do DAM nulo ou ≤ 0",
       severidade: "aviso",
       falha: (r) => naoPositivo(r.totaldam),
@@ -218,6 +240,14 @@ export interface RelatorioQualidade {
   totalLinhas: number;
   achados: AchadoQualidade[];
   temBloqueio: boolean;
+  /**
+   * Campos que o mapa não cobre e cujas verificações foram puladas.
+   *
+   * A tela mostra isto UMA vez, em vez de um aviso por linha: num export sem
+   * inscrição, a regra "inscrição vazia" marcaria todas as linhas do arquivo
+   * e enterraria os achados reais.
+   */
+  camposNaoCobertos: string[];
 }
 
 const MAX_EXEMPLOS = 5;
@@ -250,6 +280,13 @@ export interface EstruturaMapa {
   faltando: string[];
   /** Colunas declaradas no mapa que não existem no cabeçalho do arquivo. */
   origensAusentes: string[];
+  /**
+   * Campos que o mapa realmente preenche (MapaCompilado.cobertos).
+   *
+   * Ausente = julga tudo, que é o comportamento de quem monta o registro sem
+   * passar por um mapa (os testes do módulo, por exemplo).
+   */
+  camposMapeados?: string[];
 }
 
 /**
@@ -272,7 +309,14 @@ export function analisarQualidade(
   abas: { ano: number; registros: Iterable<Record<string, unknown>> }[],
   estrutura?: EstruturaMapa,
 ): RelatorioQualidade {
-  const regras = REGRAS_QUALIDADE[tipo];
+  // Regra de campo que o mapa não preenche é pulada — ver RegraQualidade.campo.
+  const cobertos = estrutura?.camposMapeados ? new Set(estrutura.camposMapeados) : null;
+  const todas = REGRAS_QUALIDADE[tipo];
+  const regras = cobertos ? todas.filter((r) => !r.campo || cobertos.has(r.campo)) : todas;
+  const camposNaoCobertos = cobertos
+    ? Array.from(new Set(todas.filter((r) => r.campo && !cobertos.has(r.campo)).map((r) => r.campo!)))
+    : [];
+
   const acc = new Map<string, AchadoQualidade>();
 
   const registrar = (
@@ -367,5 +411,6 @@ export function analisarQualidade(
     totalLinhas,
     achados,
     temBloqueio: achados.some((a) => a.severidade === "bloqueio"),
+    camposNaoCobertos,
   };
 }

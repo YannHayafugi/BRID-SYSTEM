@@ -17,7 +17,8 @@
     "sada:teste-tributario": "tsx scripts/sada-tributario-teste.ts",
     "sada:teste-worker": "tsx scripts/sada-worker-teste.ts",
     "sada:teste-ingestao": "tsx scripts/sada-ingestao-teste.ts",
-    "sada:importar": "tsx scripts/sada-importar.ts"
+    "sada:importar": "tsx scripts/sada-importar.ts",
+    "sada:dividir": "tsx scripts/sada-dividir.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

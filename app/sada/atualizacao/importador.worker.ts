@@ -188,7 +188,19 @@ function analisar(msg: Extract<ParaWorker, { acao: "analisar" }>) {
         }
       })(),
     })),
-    { faltando: unicos(faltando), origensAusentes: unicos(origensAusentes) },
+    {
+      faltando: unicos(faltando),
+      origensAusentes: unicos(origensAusentes),
+      // Interseção, não união: só é julgado o campo que TODAS as abas
+      // preenchem. Se uma aba não traz a coluna, julgar as linhas dela
+      // renderia um aviso por linha — o ruído que esta lista existe para
+      // evitar. A falta em si já aparece como origem ausente.
+      camposMapeados: abas.length
+        ? abas
+            .map((a) => a.compilado.cobertos)
+            .reduce((acc, c) => acc.filter((campo) => c.includes(campo)))
+        : [],
+    },
   );
 
   const anos = Array.from(anosVistos).sort((a, b) => a - b);

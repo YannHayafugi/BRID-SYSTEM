@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { cnpjsDoFiltro } from "@/lib/sada/clientes";
+import { CACHE_LEITURA } from "@/lib/sada/cache";
 
 export const runtime = "nodejs";
 
@@ -131,5 +132,5 @@ export async function GET(req: NextRequest) {
     recuperacaoPorTributo,
     rankingTributos,
     topDevedores,
-  });
+  }, { headers: CACHE_LEITURA });
 }

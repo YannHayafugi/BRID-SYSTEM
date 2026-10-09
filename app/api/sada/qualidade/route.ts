@@ -3,6 +3,7 @@ import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { cnpjsDoFiltro } from "@/lib/sada/clientes";
 import { ehCodigoTributario, VERIFICACAO_POR_CODIGO } from "@/lib/sada/tributario";
+import { CACHE_LEITURA } from "@/lib/sada/cache";
 
 export const runtime = "nodejs";
 
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
         comProblema: checks.filter((c) => c.qtd > 0).length,
         totalOcorrencias: checks.reduce((s, c) => s + c.qtd, 0),
       },
-    });
+    }, { headers: CACHE_LEITURA });
   }
 
   // ------------------------------------------------------------------ linhas
