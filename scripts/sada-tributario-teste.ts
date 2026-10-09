@@ -11,6 +11,7 @@
  * Rodar:  npx tsx scripts/sada-tributario-teste.ts
  */
 import {
+  ehDataISO,
   encargosEsperados,
   limitesVigentes,
   mesesAtraso,
@@ -145,6 +146,16 @@ conferir("juros supletivos do CTN", encargosEsperados(leiGeral, 1000, 23).juros,
 conferir("teto de multa", limitesVigentes(todas, "IPTU", "2023-01-01").tetoMultaPct, 20);
 conferir("teto de juros", limitesVigentes(todas, "IPTU", "2023-01-01").tetoJurosPctMes, 1);
 conferir("prazo de prescrição", limitesVigentes(todas, "IPTU", "2023-01-01").anosPrescricao, 5);
+
+// Vigência: a rota recusa o cadastro quando a data não passa aqui. A versão
+// com a regex quebrada reprovava "2016-01-01" e nenhuma regra era salva.
+conferir("vigência de data real", ehDataISO("2016-01-01"), true);
+conferir("vigência do CTN", ehDataISO("1966-10-25"), true);
+conferir("vigência bissexta", ehDataISO("2024-02-29"), true);
+conferir("vigência em branco", ehDataISO(""), false);
+conferir("vigência com dia inexistente", ehDataISO("2023-02-30"), false);
+conferir("vigência com mês 13", ehDataISO("2024-13-01"), false);
+conferir("vigência em outro formato", ehDataISO("01/01/2016"), false);
 
 if (falhas > 0) {
   console.error(`\n${falhas} divergência(s).`);
