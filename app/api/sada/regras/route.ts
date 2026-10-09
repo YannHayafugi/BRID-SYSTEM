@@ -3,7 +3,7 @@ import { getProfileAtual } from "@/lib/supabase/route";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { somenteDigitos } from "@/lib/mascaras";
 import { cnpjsDoFiltro } from "@/lib/sada/clientes";
-import { TRIBUTO_TODOS, type NivelRegra, type RegraTributaria } from "@/lib/sada/tributario";
+import { TRIBUTO_TODOS, ehDataISO, type NivelRegra, type RegraTributaria } from "@/lib/sada/tributario";
 
 export const runtime = "nodejs";
 /**
@@ -153,10 +153,15 @@ export async function POST(req: NextRequest) {
   }
 
   const inicio = String(corpo.vigenciaInicio ?? "");
-  if (!/^d{4}-d{2}-d{2}$/.test(inicio)) {
+  if (!ehDataISO(inicio)) {
     return NextResponse.json({ erro: "Início da vigência é obrigatório." }, { status: 400 });
   }
   const fim = corpo.vigenciaFim ? String(corpo.vigenciaFim) : null;
+  // Sem conferir o formato, uma data torta chegava ao Postgres e voltava como
+  // erro cru de tipo — e a comparação de texto abaixo não acusaria nada.
+  if (fim && !ehDataISO(fim)) {
+    return NextResponse.json({ erro: "Fim da vigência inválido." }, { status: 400 });
+  }
   if (fim && fim < inicio) {
     return NextResponse.json({ erro: "Fim da vigência é anterior ao início." }, { status: 400 });
   }

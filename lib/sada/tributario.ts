@@ -195,6 +195,21 @@ export function ehCodigoTributario(codigo: string): boolean {
   return VERIFICACAO_POR_CODIGO.has(codigo);
 }
 
+/**
+ * Data no formato do banco (AAAA-MM-DD), como chegam as vigências da tela.
+ *
+ * Mora aqui, e não solta dentro da rota, para ficar coberta por teste: a
+ * versão anterior perdeu as barras invertidas (`d{4}` em vez de `\d{4}`) e
+ * passou a recusar toda data real, travando o cadastro de regras inteiro sem
+ * que nada acusasse.
+ */
+export function ehDataISO(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  // O formato certo ainda admite 2024-13-45; o Date confere o calendário.
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
 // =====================================================================
 // A mesma matemática da view, para o simulador da tela
 // =====================================================================
