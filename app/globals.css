@@ -970,3 +970,78 @@ textarea {
   .barra-abas { order: 3; flex-basis: 100%; height: 42px; border-top: 1px solid #2a2620; }
   .barra-conta-nome { display: none; }
 }
+
+/* ---------- SADA · Debênture (ficha de dados) ---------- */
+
+/* Exigências de dado. Verde e âmbar não entram: a paleta da marca é dourado
+   e preto quente, e um "ok" verde ao lado de um "falta" dourado competiria
+   com o próprio dourado da marca. A diferença fica no peso e no símbolo. */
+.deb-exigencias { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.deb-exigencias li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--bg-suave);
+}
+.deb-exigencias li.falta { border-color: var(--primaria); background: var(--primaria-claro); }
+.deb-exigencias .marca {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bg-card);
+  background: var(--cinza);
+}
+.deb-exigencias li.falta .marca { background: var(--primaria); color: var(--escuro); }
+.deb-exigencias strong { display: block; font-size: 14px; color: var(--texto); }
+.deb-exigencias small { display: block; margin-top: 2px; color: var(--cinza); }
+
+.deb-aviso {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--texto);
+  background: var(--primaria-claro);
+  border: 1px solid var(--primaria);
+}
+
+/* Barra de composição da carteira por categoria. */
+.deb-barra {
+  display: flex;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--track);
+}
+.deb-barra span { display: block; min-width: 2px; }
+
+.deb-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--cinza);
+}
+.deb-legenda i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 3px;
+  vertical-align: baseline;
+}
+
+.deb-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--texto); }
+.deb-check input { width: auto; margin: 0; }
+
+/* A linha ainda no chute da heurística — fica marcada até alguém decidir. */
+.sada-tabela tr.deb-chute td:first-child { box-shadow: inset 3px 0 0 var(--primaria); }
