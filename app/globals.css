@@ -1045,3 +1045,114 @@ textarea {
 
 /* A linha ainda no chute da heurística — fica marcada até alguém decidir. */
 .sada-tabela tr.deb-chute td:first-child { box-shadow: inset 3px 0 0 var(--primaria); }
+
+/* ---------- SADA · Debênture (montagem do documento) ---------- */
+
+.deb-abas {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--borda);
+}
+.deb-abas a {
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cinza);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.deb-abas a:hover { color: var(--texto); }
+.deb-abas a.ativa { color: var(--texto); border-bottom-color: var(--primaria); }
+
+/* Duas colunas: a lista à esquerda, sumário e modelo à direita, grudados ao
+   rolar — a contagem de páginas é o retorno de cada clique na lista. */
+.deb-montagem { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.deb-montagem > aside { position: sticky; top: 16px; }
+
+.deb-secao + .deb-secao { margin-top: 20px; }
+.deb-secao h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cinza);
+  border-bottom: 1px solid var(--borda);
+}
+.deb-secao h3 small { font-weight: 600; letter-spacing: 0; text-transform: none; }
+.deb-secao ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.deb-secao li {
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--bg-suave);
+}
+.deb-secao li.marcado { border-color: var(--primaria); background: var(--bg-card); }
+.deb-secao label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.deb-secao label input { width: auto; margin: 2px 0 0; flex: none; }
+.deb-secao li label input:disabled { cursor: default; }
+
+.deb-topico-titulo { font-size: 14px; font-weight: 600; color: var(--texto); }
+.deb-topico-desc { margin: 6px 0 0 26px; font-size: 13px; color: var(--cinza); }
+.deb-topico-pe {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0 26px;
+}
+.deb-topico-pe small { color: var(--cinza); font-size: 12px; }
+.deb-setas { display: flex; gap: 4px; }
+.deb-setas .btn { padding: 2px 8px; font-size: 13px; line-height: 1.4; }
+
+.deb-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--cinza);
+  background: var(--track);
+}
+.deb-tag.alerta { color: var(--escuro); background: var(--primaria); }
+
+.deb-contagem { margin: 0 0 10px; font-size: 13px; color: var(--cinza); }
+.deb-contagem strong { color: var(--texto); font-size: 15px; }
+
+.deb-sumario { margin: 0; padding-left: 20px; font-size: 13px; color: var(--texto); }
+.deb-sumario li { margin: 3px 0; }
+.deb-sumario li.divisoria {
+  list-style: none;
+  margin-left: -20px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--primaria);
+  background: var(--escuro);
+}
+
+.deb-ok {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--texto);
+  background: var(--bg-suave);
+  border: 1px solid var(--borda);
+}
+
+/* Estreito: o sumário desce para baixo da lista e para de grudar. */
+@media (max-width: 1000px) {
+  .deb-montagem { grid-template-columns: minmax(0, 1fr); }
+  .deb-montagem > aside { position: static; }
+}
