@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ComoUsar, Dica } from "@/app/components/Ajuda";
+import { AbasDebenture } from "./Abas";
 import {
   CATEGORIAS,
   COR_CATEGORIA,
@@ -205,6 +206,8 @@ export default function DebenturePage() {
         </div>
         <Link href="/sada" className="landing-cta secundario">← Dashboard</Link>
       </header>
+
+      <AbasDebenture ativa="/sada/debenture" />
 
       <ComoUsar chave="deb-ficha-v1" titulo="Como usar esta tela">
         <p>
