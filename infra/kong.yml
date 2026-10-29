@@ -1,0 +1,96 @@
+# =====================================================================
+# Kong · roteamento declarativo do Supabase auto-hospedado
+#
+# Junta auth, rest e storage sob UMA origem, nos caminhos que o
+# @supabase/supabase-js espera. É isto que permite trocar a URL do Supabase
+# Cloud pela do VPS sem mexer em uma linha do app.
+#
+# A autenticação de verdade é o JWT, conferido pelo PostgREST e pelo GoTrue
+# contra o JWT_SECRET. O key-auth abaixo é só o porteiro que exige a
+# apikey, como no Supabase Cloud.
+# =====================================================================
+
+_format_version: "2.1"
+_transform: true
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: $SUPABASE_ANON_KEY
+  - username: service_role
+    keyauth_credentials:
+      - key: $SUPABASE_SERVICE_KEY
+
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+services:
+  # -------------------------------------------------------------------
+  # Auth — sem key-auth na verificação de usuário: o cliente chama
+  # /auth/v1/token para ENTRAR, ou seja, antes de ter qualquer sessão.
+  # -------------------------------------------------------------------
+  - name: auth-v1-open
+    url: http://auth:9999/
+    routes:
+      - name: auth-v1-open
+        strip_path: true
+        paths:
+          - /auth/v1/verify
+          - /auth/v1/callback
+          - /auth/v1/authorize
+          - /auth/v1/token
+    plugins:
+      - name: cors
+
+  - name: auth-v1
+    url: http://auth:9999/
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow: [admin, anon]
+
+  # -------------------------------------------------------------------
+  # PostgREST — por onde passa todo `.from()` e `rpc()` do SADA.
+  # -------------------------------------------------------------------
+  - name: rest-v1
+    url: http://rest:3000/
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow: [admin, anon]
+
+  # -------------------------------------------------------------------
+  # Storage — lib/processos/arquivos.ts.
+  # -------------------------------------------------------------------
+  - name: storage-v1
+    url: http://storage:5000/
+    routes:
+      - name: storage-v1-all
+        strip_path: true
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: cors

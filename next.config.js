@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Monta em .next/standalone uma árvore só com o que o servidor usa de
+  // fato, para a imagem Docker não carregar o node_modules inteiro.
+  // Na Vercel é ignorado — lá o empacotamento é da plataforma.
+  output: "standalone",
+
   // pdf-parse depende do pdfjs-dist, que não pode ser processado pelo
   // empacotador (webpack) do Next.js — precisa ser carregado direto pelo
   // Node.js em tempo de execução, daí ficar de fora do bundle. O

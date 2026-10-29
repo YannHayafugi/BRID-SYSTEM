@@ -1,0 +1,229 @@
+# =====================================================================
+# GRUPO BRID · stack de produção no VPS (Hostinger, São Paulo)
+#
+# Supabase auto-hospedado, enxugado para o que o código usa de verdade:
+# Postgres, Auth (GoTrue), PostgREST, Storage e Kong. Realtime e Edge
+# Functions ficam de fora — o `grep` no código não achou uso nenhum, e
+# container que não serve a ninguém só consome RAM e superfície de ataque.
+#
+# POR QUE AUTO-HOSPEDAR EM VEZ DE SÓ UM POSTGRES: o app depende de
+# @supabase/ssr para sessão, de PostgREST para toda consulta (`.from()`),
+# de `rpc()` para o refresh das materialized views e de políticas RLS para
+# controle de acesso. Trocar isso por SQL puro seria semanas de reescrita e
+# risco alto justamente no controle de acesso.
+#
+# LATÊNCIA: app e banco no MESMO host, conversando pela rede interna do
+# Docker. Não há viagem pela internet entre eles — é a maior diferença em
+# relação ao desenho atual (Vercel fora do país + Supabase em outra região).
+#
+# ---------------------------------------------------------------------
+# ANTES DE SUBIR, CONFIRA AS TAGS DAS IMAGENS.
+# As versões abaixo são um ponto de partida coerente entre si, mas o
+# Supabase atualiza o conjunto com frequência e os componentes têm de ser
+# compatíveis. Copie as tags vigentes de:
+#   https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml
+# ---------------------------------------------------------------------
+#
+# Este arquivo é a referência da arquitetura. Com Dokploy, cada serviço
+# vira uma aplicação no painel e o TLS/roteamento ficam com o Traefik dele
+# — veja infra/README.md.
+# =====================================================================
+
+name: brid
+
+services:
+  # -------------------------------------------------------------------
+  # Postgres
+  #
+  # Imagem do Supabase, não a oficial do Postgres: ela já traz as extensões
+  # e os papéis (anon, authenticated, service_role, supabase_auth_admin)
+  # que GoTrue e PostgREST esperam encontrar. Com `postgres:17` puro o
+  # GoTrue não sobe.
+  # -------------------------------------------------------------------
+  db:
+    image: supabase/postgres:15.8.1.060
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET}
+      JWT_EXP: 3600
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Ajuste de memória e paralelismo. Ver infra/postgres/tuning.conf —
+      # os padrões do Postgres são para uma máquina pequena e deixariam o
+      # refresh das materialized views bem mais lento do que precisa.
+      - ./postgres/tuning.conf:/etc/postgresql-custom/tuning.conf:ro
+      # Esquema do zero, na ordem. Só roda no PRIMEIRO start, com o volume
+      # vazio — depois disso é ignorado. Migração posterior é na mão.
+      - ../supabase/schema-unificado.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - include=/etc/postgresql-custom/tuning.conf
+    # Só na rede interna. O Postgres NÃO é publicado para a internet: quem
+    # fala com ele de fora é o PostgREST, atrás do Kong e do TLS. Para
+    # administrar, use um túnel SSH (ver README).
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [interna]
+
+  # -------------------------------------------------------------------
+  # Auth (GoTrue)
+  #
+  # O app usa signInWithPassword, getUser, signOut e updateUser. Não há
+  # cadastro aberto nem confirmação por e-mail no fluxo atual, por isso
+  # DISABLE_SIGNUP fica ligado: usuário novo é criado por quem administra.
+  # -------------------------------------------------------------------
+  auth:
+    image: supabase/gotrue:v2.158.1
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${SITE_URL:?defina SITE_URL}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ${SITE_URL}
+      # Cadastro fechado: as contas são de servidores públicos e do time,
+      # criadas por quem administra. Deixar aberto permitiria qualquer um
+      # criar conta e chegar à tela de login do sistema.
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      # Sem SMTP configurado, recuperação de senha não funciona. Enquanto
+      # não houver, a troca é feita por quem administra. Ver README.
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_LOG_LEVEL: warn
+    expose:
+      - "9999"
+    networks: [interna]
+
+  # -------------------------------------------------------------------
+  # PostgREST — é por aqui que passa TODO `.from()` e `rpc()` do código.
+  # -------------------------------------------------------------------
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      # O refresh das materialized views leva ~20 s e é chamado por rpc()
+      # ao fim da importação; o recálculo da validação tributária, ~11 s.
+      # O padrão do PostgREST derrubaria as duas chamadas por tempo.
+      PGRST_DB_POOL: 20
+      PGRST_DB_POOL_TIMEOUT: 120
+      PGRST_SERVER_TIMING_ENABLED: "false"
+    expose:
+      - "3000"
+    networks: [interna]
+
+  # -------------------------------------------------------------------
+  # Storage — usado por lib/processos/arquivos.ts.
+  #
+  # Backend em disco local (file), não S3: é um VPS só e o volume entra no
+  # mesmo backup do resto. Trocar para S3 depois é mudar duas variáveis.
+  # -------------------------------------------------------------------
+  storage:
+    image: supabase/storage-api:v1.11.13
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      rest: { condition: service_started }
+    environment:
+      ANON_KEY: ${ANON_KEY:?defina ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY:?defina SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: brid
+      REGION: sa-east-1
+      GLOBAL_S3_BUCKET: brid
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+    volumes:
+      - storage-data:/var/lib/storage
+    expose:
+      - "5000"
+    networks: [interna]
+
+  # -------------------------------------------------------------------
+  # Kong — junta auth, rest e storage sob UMA origem.
+  #
+  # É o que faz o @supabase/supabase-js funcionar sem alteração: ele espera
+  # /auth/v1, /rest/v1 e /storage/v1 no mesmo host.
+  # -------------------------------------------------------------------
+  kong:
+    image: kong:2.8.1
+    restart: unless-stopped
+    depends_on: [auth, rest, storage]
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    volumes:
+      - ./kong.yml:/home/kong/kong.yml:ro
+    # Publicado só no localhost do host: quem expõe para a internet, com
+    # TLS, é o Traefik do Dokploy.
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks: [interna]
+
+  # -------------------------------------------------------------------
+  # O app
+  # -------------------------------------------------------------------
+  app:
+    image: ${APP_IMAGE:-ghcr.io/yannhayafugi/brid-system:latest}
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      kong: { condition: service_started }
+    environment:
+      NODE_ENV: production
+      # As NEXT_PUBLIC_* já estão inlinadas na imagem (ver Dockerfile);
+      # repetir aqui não muda o que o navegador recebe. O que importa em
+      # runtime é a chave secreta.
+      SUPABASE_SECRET_KEY: ${SERVICE_ROLE_KEY}
+      NEXT_PUBLIC_SUPABASE_URL: ${SITE_URL}
+      # Conexão DIRETA ao Postgres, para o COPY da importação de planilha.
+      # Agora é a rede interna do Docker em vez da internet: é aqui que a
+      # ingestão de milhões de linhas ganha mais.
+      SADA_DB_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [interna]
+
+volumes:
+  db-data:
+  storage-data:
+
+networks:
+  interna:
+    driver: bridge

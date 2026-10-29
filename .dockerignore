@@ -1,0 +1,24 @@
+# Fora da imagem: o que é do ambiente de quem desenvolve, o que é segredo e
+# o que seria reconstruído de qualquer jeito.
+.git
+.github
+.next
+node_modules
+npm-debug.log*
+
+# NUNCA entram na imagem. .claude/ guarda .env.local.
+.env
+.env.*
+.claude/
+
+# Material de trabalho e documentação: não fazem parte do que roda.
+infra/
+supabase/
+docs/
+*.md
+!README.md
+
+# Planilhas e arquivos de teste do ente — não têm por que ir para a imagem.
+*.xlsx
+*.pdf
+*.docx

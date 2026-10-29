@@ -17,3 +17,6 @@ tsconfig.tsbuildinfo
 .env*
 .env
 .env.local
+# O modelo sem valores precisa ser versionado: e ele que documenta quais
+# variaveis a stack exige. A regra .env* acima o pegava junto.
+!.env.example
